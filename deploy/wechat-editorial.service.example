@@ -1,0 +1,19 @@
+[Unit]
+Description=WeChat editorial review bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/absolute/path/wechat-editorial
+EnvironmentFile=/absolute/path/wechat-editorial/.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/node /absolute/path/wechat-editorial/editorial/wecom-bot-local/bridge.mjs
+Restart=on-failure
+RestartSec=10
+KillSignal=SIGTERM
+TimeoutStopSec=4h
+UMask=0077
+
+[Install]
+WantedBy=default.target

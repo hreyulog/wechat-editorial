@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/aiworkskills/wechat-article-skills",
+  "commit": "ca036f75f4bac4fcefe6eaedd8d22d97bf8c92ca",
+  "license": "Apache-2.0",
+  "scope": "Unmodified formatting and draft payload helper subset; credentials and user config excluded."
+}

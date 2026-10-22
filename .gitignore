@@ -5,3 +5,16 @@ venv/
 vendor/
 node_modules/
 .DS_Store
+.env
+.env.*
+!.env.example
+dist/
+*.log
+*.tmp
+editorial/wechat-content-studio/config.json
+editorial/wechat-content-studio/jobs/
+editorial/wechat-content-studio/outbox/
+editorial/wechat-content-studio/state/
+editorial/wecom-bot-local/state/
+editorial/upstream/**/aws.env
+editorial/upstream/**/.aws-article/
