@@ -164,7 +164,7 @@ def deliver(job_id, version=None):
                        and prior.get('status') not in ('failed', 'cancelled') for f in prior.get('files', [])}
         files = [f for f in files if f['sha256'] not in prior_files]
         write(path, {'job_id': job_id, 'version': number, 'group': CONFIG['group'], 'text': text,
-                     'destination': destination, 'files': files, 'status': 'queued', 'created_at': now(), 'steps': []})
+                     'destination': destination, 'source_message_id': read(ROOT/'state/active-wecom-task.json').get('msgid') if (ROOT/'state/active-wecom-task.json').exists() else None, 'files': files, 'status': 'queued', 'created_at': now(), 'steps': []})
     if job['kind'] == 'video' or official.exists(): set_status(job, 'awaiting_review')
     return {'job_id': job_id, 'version': number, 'status': job['status'], 'outbox': str(path), 'delivery': read(path)['status']}
 

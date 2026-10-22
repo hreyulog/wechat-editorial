@@ -29,7 +29,7 @@ bash scripts/setup-linux.sh
 
 ## 2. Codex 与凭证
 
-安装你可用版本的官方 Codex CLI（`npm install -g @openai/codex`），用运行机器人同一个 Linux 用户完成 `codex login`，或按自己的 Codex API/provider 配置认证。本仓库不会复制 Windows Codex 登录缓存。CLI 需支持 `codex exec --json`、workspace-write、`exec resume` 和 stdin prompt；兼容性留给本次目标环境验收。
+安装你可用版本的官方 Codex CLI（`npm install -g @openai/codex`），用运行机器人同一个 Linux 用户完成 `codex login`，或按自己的 Codex API/provider 配置认证。本仓库不会复制 Windows Codex 登录缓存。CLI 需支持 `codex app-server --stdio` 以及 thread/start/resume、turn/start/steer/interrupt 和 agentMessage 事件；兼容性留给目标环境验收。现在使用原生会话服务，已替换只能读取最终结果的 exec 调用方式。
 
 编辑仓库根 `.env`（setup 只在不存在时从模板生成）：
 
@@ -78,7 +78,18 @@ npm run bot
 @机器人 通过 C0001-v2
 ```
 
-立即确认回复是“收到，处理中”。制作中的阶段说明会发回群里；需要选择音色、方向或试听确认时，先问并暂停这一轮，等下一条回复。成品由出站队列发回同群，包含真实公众号草稿预览及实际视频。“通过”只记审核，不发布。执行中的追加消息仍排队，暂不支持即时打断任务。
+立即确认回复是“收到，处理中”。制作中的阶段说明会发回群里；需要选择音色、方向或试听确认时，先问并暂停这一轮，等下一条回复。成品由出站队列发回同群，包含真实公众号草稿预览及实际视频。“通过”只记审核，不发布。
+
+即时控制示例（都需真正 @ 机器人）：
+
+```text
+补充：旁白不要加背景音乐。  # 普通执行中消息直接 steer 当前任务
+停止                     # 中断当前一轮，保留已有文件
+打断：先做女声10秒试听。  # 中断后按新要求续做
+新任务：另写一篇马尔可夫文章。 # 明确另起选题才排队
+```
+
+进度/任务列表可直接查询。控制绑定当前来源消息与 turnId；若原任务刚结束，不能误打断下一条。控制回执不明保留 control_unknown，不自动重放。停止不撤销已经发出的消息或已完成的远端写入；只取消本条任务尚未发送的关联出站内容。
 
 ## 4. 可选常驻服务
 

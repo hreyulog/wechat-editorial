@@ -29,11 +29,12 @@ const logger={info:()=>{},warn:()=>{},error:()=>{},debug:message=>{
 }};
 const client=new WSClient({botId,secret,logger,maxAuthFailureAttempts:1,maxReconnectAttempts:10,requestTimeout:30000});
 const bind=process.argv.includes('--bind'),phrase=crypto.randomBytes(4).toString('hex'),studio=path.resolve(root,'../wechat-content-studio');
-let worker,closing=false;
+let worker,runner,closing=false;
 if(bind){console.log('请在目标企业微信群 @ 此机器人，发送：绑定审核群 '+phrase);}
 else{
  if(!fs.existsSync(path.join(stateDir,'binding.json')))throw Error('Run npm run bind to select a group before starting the bot');
- worker=startProduction({client,botId,root,onError,runTask:createCodexRunner({studio,stateDir,repository})});
+ runner=createCodexRunner({studio,stateDir,repository});
+ worker=startProduction({client,botId,root,onError,runTask:runner,controlTask:runner.control});
 }
 client.on('authenticated',()=>{state.authenticated=true;state.phase=bind?'waiting_for_binding':'waiting_for_group_task';save();console.log('Enterprise bot authenticated.');});
 client.on('disconnected',()=>{state.authenticated=false;state.phase='disconnected';save();});
@@ -53,7 +54,7 @@ let timer;
 const close=async()=>{
  if(closing)return;closing=true;worker?.stop();
  while(worker?.isBusy())await new Promise(r=>setTimeout(r,1000));
- clearInterval(timer);client.disconnect();state.phase='stopped';save();process.exit(0);
+ clearInterval(timer);runner?.close();client.disconnect();state.phase='stopped';save();process.exit(0);
 };
 process.on('SIGTERM',()=>void close());process.on('SIGINT',()=>void close());
 timer=setInterval(()=>{state.socket_connected=client.isConnected;save();},5000);

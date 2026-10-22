@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {handleContentMessage} from '../wechat-content-studio/router.mjs';
 import {reviewMedia} from './review-media.mjs';
+import {applyIncomingControl} from './interrupt.mjs';
 
 const read=p=>JSON.parse(fs.readFileSync(p,'utf8').replace(/^\uFEFF/,''));
 const now=()=>new Date().toISOString();
@@ -36,7 +37,7 @@ export function validateFiles(item,studio){
 function ack(result){if(result?.errcode!==0)throw Error('Official send acknowledgment failed');}
 export function errorDetails(error){return {code:error?.errcode??error?.code??null,message:String(error?.errmsg??error?.message??'Unspecified error').slice(0,700)};}
 
-export function startProduction({client,botId,root,onError,runTask}){
+export function startProduction({client,botId,root,onError,runTask,controlTask}){
  const stateDir=path.join(root,'state'),bindingPath=path.join(stateDir,'binding.json');
  if(!fs.existsSync(bindingPath))return {handle:async()=>false};
  const binding=read(bindingPath),studio=path.resolve(root,'../wechat-content-studio');
@@ -55,20 +56,20 @@ export function startProduction({client,botId,root,onError,runTask}){
  const push=async content=>{if(!client.isConnected)throw Error('WeCom disconnected');
   let clipped='';for(const char of String(content)){if(Buffer.byteLength(clipped+char,'utf8')>3800)break;clipped+=char;}
   ack(await client.sendMessage(binding.chatid,{msgtype:'markdown',markdown:{content:clipped}}));};
- let handling=false,sending=false;
+ let handling=false,sending=false,activeRecord;
  async function processInbox(){
   if(handling||!client.isConnected)return;handling=true;
   try{
-   const names=fs.readdirSync(inbox).filter(n=>n.endsWith('.json')).sort((a,b)=>String(read(path.join(inbox,a)).received_at).localeCompare(String(read(path.join(inbox,b)).received_at)));
+   const names=fs.readdirSync(inbox).filter(n=>n.endsWith('.json')).sort((a,b)=>Number(!!read(path.join(inbox,b)).priority)-Number(!!read(path.join(inbox,a)).priority)||String(read(path.join(inbox,a)).received_at).localeCompare(String(read(path.join(inbox,b)).received_at)));
    for(const name of names){const p=path.join(inbox,name),v=read(p);if(v.status!=='queued')continue;
-    v.status='running';v.started_at=now();write(p,v);status.phase='processing';status.active_message=v.msgid;save();
+    v.status='running';v.started_at=now();write(p,v);activeRecord={p,v};write(path.join(studio,'state/active-wecom-task.json'),{msgid:v.msgid,user_id:v.user_id,started_at:v.started_at});status.phase='processing';status.active_message=v.msgid;save();
     try{
      const direct=await handleContentMessage({reply:async(_sender,text)=>{v.reply=text;write(p,v);}},
        {text:v.text,id:'wecom:'+v.msgid,senderId:v.user_id});
      if(!direct){
       const prompt='来自已授权企业微信群成员 @ 机器人的用户任务。消息凭据 wecom:'+v.msgid+'；发起人 '+v.user_id+'。本群全体成员均已获准发起制作及修改任务。先读工作区 AGENTS.md。关键阶段使用简短 commentary 给群成员说明正在处理什么；这些内容会实时转发。需要用户选方向、音色或试听确认时，先给真实小样或关键问题，在最终回复中明确等待选择后停止，收到下一条回复再继续，不要擅自全部做完才问。成品用 studio.py deliver 入队到已绑定企业微信群，禁止发到旧微信群或自动公开发布。只处理本条新任务，不补发历史稿件。\n\n'+v.text;
       if(!runTask)throw Error('Codex runner is not configured');
-      const result=await runTask(prompt,{onProgress:async text=>{
+      const result=await runTask(prompt,{messageId:v.msgid,onProgress:async text=>{
        v.progress=v.progress||[];const prior=v.progress.find(s=>s.text===text);if(prior)return prior.status==='sent';
        const progress={text,status:'sending',at:now()};v.progress.push(progress);write(p,v);
        try{await push(text);progress.status='sent';progress.sent_at=now();}catch(error){progress.status='delivery_unknown';onError(error,'progress_delivery');}
@@ -82,8 +83,17 @@ export function startProduction({client,botId,root,onError,runTask}){
       }
      }
      v.status='replying';v.finished_at=now();write(p,v);
-     if(!v.skip_final_reply)await push(v.reply);v.status='completed';v.reply_ack_at=now();write(p,v);
-    }catch(error){v.status='outcome_unknown';v.error=errorDetails(error);write(p,v);onError(error,'production_task');}
+     if(!v.skip_final_reply&&!v.interrupt_requested_by)await push(v.reply);v.status='completed';v.reply_ack_at=now();write(p,v);
+    }catch(error){
+     if(v.interrupt_requested_by&&(/interrupt/i.test(error.message)||error.code==='CODEX_TURN_INTERRUPTED')){
+      v.status='interrupted';v.interrupted_at=now();write(p,v);
+      const cp=path.join(inbox,digest(v.interrupt_requested_by)+'.json');
+      if(fs.existsSync(cp)){const c=read(cp);c.stop_confirmed_at=now();if(c.status!=='queued')c.status='completed';write(cp,c);}
+     }else{v.status='outcome_unknown';v.error=errorDetails(error);write(p,v);onError(error,'production_task');}
+    }
+    activeRecord=undefined;
+    const activePath=path.join(studio,'state/active-wecom-task.json');
+    if(fs.existsSync(activePath)&&read(activePath).msgid===v.msgid)fs.unlinkSync(activePath);
     status.phase='waiting_for_group_task';delete status.active_message;save();
    }
   }catch(error){onError(error,'production_inbox');}finally{handling=false;}
@@ -93,6 +103,8 @@ export function startProduction({client,botId,root,onError,runTask}){
   try{for(const name of fs.readdirSync(outbox).filter(n=>n.endsWith('.json')).sort()){
    const p=path.join(outbox,name),v=read(p);if(!eligible(v,binding))continue;
    let files;try{files=validateFiles(v,studio);}catch(error){v.status='failed';v.error=error.message;write(p,v);continue;}
+   const cancelled=()=>{if(!v.source_message_id)return false;const source=path.join(inbox,digest(v.source_message_id)+'.json');return fs.existsSync(source)&&!!read(source).interrupt_requested_by;};
+   if(cancelled()){v.status='cancelled';write(p,v);continue;}
    v.status='sending';v.steps=v.steps||[];write(p,v);
    try{
     if(!v.steps.some(s=>s.step==='text'&&s.errcode===0)){
@@ -107,12 +119,13 @@ export function startProduction({client,botId,root,onError,runTask}){
      const upload=await client.uploadMedia(media.bytes,{type:'video',filename:media.filename});
      if(!upload.media_id)throw Error('Video upload returned no media ID');
      v.steps.push({step:'upload:'+i,media_id:upload.media_id,at:now()});write(p,v);
+     if(cancelled()){const e=new Error('Delivery cancelled by user interruption');e.code='DELIVERY_CANCELLED';throw e;}
      v.stage='sending_video';write(p,v);
      ack(await client.sendMediaMessage(binding.chatid,'video',upload.media_id,{title:v.job_id+'-v'+v.version+' 审片',description:'请在本群 @ 机器人提出修改意见。'}));
      v.steps.push({step:'file:'+i,errcode:0,at:now()});write(p,v);
     }
     v.status='sent';v.stage='completed';v.sent_at=now();v.recipient_confirmation='pending';write(p,v);
-   }catch(error){v.status=['uploading','preparing_media'].includes(v.stage)?'upload_failed':'delivery_unknown';v.error=errorDetails(error);v.failed_at=now();write(p,v);onError(error,'production_delivery');}
+   }catch(error){v.status=error.code==='DELIVERY_CANCELLED'?'cancelled':['uploading','preparing_media'].includes(v.stage)?'upload_failed':'delivery_unknown';v.error=errorDetails(error);v.failed_at=now();write(p,v);onError(error,'production_delivery');}
   }}finally{sending=false;}
  }
  const timer=setInterval(()=>{void processInbox();void processOutbox().catch(e=>onError(e,'outbox'));},3000);
@@ -134,6 +147,13 @@ export function startProduction({client,botId,root,onError,runTask}){
    }catch(error){record.status='outcome_unknown';record.error=errorDetails(error);write(p,record);onError(error,'status_reply');}
    return true;
   }
+  const record=read(p),targetRecord=activeRecord;
+  try{
+   const handled=await applyIncomingControl({record,target:targetRecord?.v,
+    control:options=>{if(!controlTask)throw Error('Native task control is unavailable');return controlTask({...options,targetMessageId:targetRecord?.v.msgid});},
+    persist:()=>write(p,record),persistTarget:()=>{if(targetRecord)write(targetRecord.p,targetRecord.v);},push});
+   if(handled)return true;
+  }catch(error){onError(error,'task_control');await push('当前控制请求的结果不明，已保留记录，不会自动重复执行。');return true;}
   void processInbox();return true;
  }};
 }
