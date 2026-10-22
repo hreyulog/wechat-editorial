@@ -30,9 +30,13 @@ edit('dist/codex/app-server-runner.js','async editorialMcpStatus(',
         const tools = Object.keys(server?.tools||{});
         if (!tools.includes("list_logged_accounts")) return {connected:false,tools};
         const read = await this.request("mcpServer/tool/call", {threadId:session.threadId,server:"turbo_push",tool:"list_logged_accounts",arguments:{}});
-        return {connected:!read.isError,tools,read_tool:"list_logged_accounts",read_ok:!read.isError,browser_publishing_enabled:false};
+        return {connected:!read.isError,tools,read_tool:"list_logged_accounts",read_ok:!read.isError,browser_publishing_enabled:tools.includes("publish_video")||tools.includes("publish_article")||tools.includes("publish_graph_text")};
     }
     async listSessions() {`);
+// Upgrade the read-only diagnostic from an older installation as well.
+edit('dist/codex/app-server-runner.js','browser_publishing_enabled:tools.includes(',
+ 'browser_publishing_enabled:false',
+ 'browser_publishing_enabled:tools.includes("publish_video")||tools.includes("publish_article")||tools.includes("publish_graph_text")');
 edit('dist/server/account-manager.js','async editorialMcpStatus(',
  '    async controlSession(',
  `    async editorialMcpStatus(accountId,sessionId) {

@@ -2,11 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-// Local content operations and reads only. Browser publishing is not enabled here.
+// Full TurboPush MCP v1.1.3 surface, matching the current workstation integration.
 export const TURBOPUSH_TOOLS=Object.freeze([
- 'list_platforms','list_accounts','list_logged_accounts','list_platform_settings',
- 'list_articles','get_article','create_article','create_graph_text','create_video','update_article',
- 'list_records','get_record_info','get_platform_setting_schema'
+  'list_platforms','list_accounts','list_logged_accounts','list_platform_settings',
+  'list_articles','get_article','create_article','create_graph_text','create_video','update_article',
+  'list_records','get_record_info','get_platform_setting_schema',
+  'publish_article','publish_graph_text','publish_video','close_browser',
+  'create_platform_setting','update_platform_setting','delete_platform_setting','delete_article'
 ]);
 export function turbopushCodexArgs(configPath){
  if(!configPath||!fs.existsSync(configPath))return [];
