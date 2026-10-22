@@ -5,7 +5,7 @@ import re
 import sys
 import urllib.request
 from pathlib import Path
-from studio import ROOT, checked_manifest, get_job, now, read, sha, write
+from studio import ROOT, checked_manifest, get_job, now, read, sha, write, video_metadata
 
 
 def request_local(endpoint, body=None):
@@ -29,28 +29,30 @@ def import_video(job_id,version=None):
     if manifest.get('qa',{}).get('video',{}).get('passed') is not True: raise ValueError('Validated video required')
     visual=read(folder/'visual-review.json')
     if visual.get('checked') is not True: raise ValueError('Actual video visual review required')
+    metadata=video_metadata(job,folder)
     video=folder/'review.mp4';digest=sha(video);receipt_path=folder/'turbopush-local.json'
     if receipt_path.exists():
         saved=read(receipt_path)
         if saved.get('video_sha256')!=digest: raise ValueError('Saved local draft belongs to another video')
+        if saved.get('title')!=metadata['title'] or saved.get('description')!=metadata['description']: raise ValueError('Local content metadata changed; create a new version before review')
         if not saved.get('id'): raise ValueError('Previous local import outcome unknown; inspect TurboPush before retrying')
         return verify_local(saved,receipt_path,video)
-    number=int(folder.name[1:]);title=f'{job_id}-v{number}｜{job["topic"]}'
-    payload={'title':title,'desc':job.get('summary') or job['topic'],
+    number=int(folder.name[1:]);title=metadata['title']
+    payload={'title':title,'desc':metadata['description'],
              'files':[str(video)],'thumb':[str(folder/'cover.png')],'autoThumb':False,'syncDraft':True}
     saved={'job_id':job_id,'version':number,'video_sha256':digest,'state':'creating_local_content','at':now(),
            'video_channel_uploaded':False,'published':False}
     write(receipt_path,saved)
     created=request_local('/article/video',payload)
     if not isinstance(created,dict) or not created.get('id'): raise ValueError('No local content ID returned')
-    saved.update(id=created['id'],title=title,state='stored_locally',at=now());write(receipt_path,saved)
+    saved.update(id=created['id'],title=title,description=metadata['description'],state='stored_locally',at=now());write(receipt_path,saved)
     return verify_local(saved,receipt_path,video)
 
 
 def verify_local(saved,receipt_path,video):
     endpoint='/article/get/'+str(saved['id']);detail=request_local(endpoint)
     payload=detail.get('publish_data',{}) if isinstance(detail,dict) else {}
-    if payload.get('title')!=saved['title'] or str(video) not in payload.get('files',[]) or detail.get('status')!=1:
+    if payload.get('title')!=saved['title'] or payload.get('desc')!=saved.get('description') or str(video) not in payload.get('files',[]) or detail.get('status')!=1:
         raise ValueError('Local draft readback did not match the imported video')
     if payload.get('syncDraft') is not True:
         payload['syncDraft']=True;request_local('/article/update/'+str(saved['id']),payload)

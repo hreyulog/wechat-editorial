@@ -43,25 +43,14 @@ export function validateFiles(item,studio){
  });
 }
 function ack(result){if(result?.errcode!==0)throw Error('Official send acknowledgment failed');}
-export function validatePhonePreviewImages(item,studio){
- const images=item.images||[];
- if(!item.phone_preview_sha256){if(images.length)throw Error('QR images require a bound phone preview');return [];}
+export function validateVideoReview(item,studio){
+ if(!item.video_metadata_sha256)return;
  const folder=fs.realpathSync(path.join(studio,'jobs',item.job_id,'v'+item.version));
- const previewPath=path.join(folder,'phone-preview.json');
- if(digest(fs.readFileSync(previewPath))!==item.phone_preview_sha256)throw Error('Phone preview changed after review was queued');
- const preview=read(previewPath);
- if(preview.provenance!=='video_channel_phone_preview'||preview.manifest_sha256!==digest(fs.readFileSync(path.join(folder,'manifest.json'))))throw Error('Phone preview does not match this video version');
- const draftPath=fs.realpathSync(path.join(folder,preview.draft_receipt?.path||'')),draftRelative=path.relative(folder,draftPath);
- if(draftRelative.startsWith('..')||path.isAbsolute(draftRelative)||digest(fs.readFileSync(draftPath))!==preview.draft_receipt?.sha256)throw Error('Video draft upload receipt changed');
- if(preview.expires_at&&(!Number.isFinite(Date.parse(preview.expires_at))||Date.parse(preview.expires_at)<=Date.now()))throw Error('Phone preview expired or has an invalid expiry');
- if(images.length!==(preview.image?1:0))throw Error('Phone preview QR image is missing or duplicated');
- return images.map(image=>{
-  const imagePath=fs.realpathSync(image.path),expected=fs.realpathSync(path.join(folder,preview.image.path));
-  const relative=path.relative(path.join(folder,'src'),imagePath),bytes=fs.readFileSync(imagePath);
-  if(relative.startsWith('..')||path.isAbsolute(relative)||imagePath!==expected||digest(bytes)!==image.sha256||image.sha256!==preview.image.sha256)throw Error('Phone preview QR image changed');
-  if(bytes.length>2*1024*1024||!(bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))||bytes.subarray(0,3).equals(Buffer.from([255,216,255]))))throw Error('Invalid phone preview QR image');
-  return {bytes,filename:path.basename(imagePath)};
- });
+ const metadataPath=path.join(folder,'video-metadata.json');
+ if(digest(fs.readFileSync(metadataPath))!==item.video_metadata_sha256)throw Error('Reviewed video title or description changed');
+ const metadata=read(metadataPath),manifest=read(path.join(folder,'manifest.json'));
+ if(metadata.title.trim()!==item.video_metadata?.title||metadata.description.trim()!==item.video_metadata?.description
+  ||manifest.outputs['review.mp4']!==item.review_video_sha256)throw Error('Video review metadata does not match its version');
 }
 export function errorDetails(error){return {code:error?.errcode??error?.code??null,message:String(error?.errmsg??error?.message??'Unspecified error').slice(0,700)};}
 
@@ -87,8 +76,11 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
   if(v.status==='sending'&&eligible({...v,status:'queued'},binding,sourceOf(v),knownMembers)){
    v.status='delivery_unknown';v.error='Service restarted during send; manual reconciliation required';write(p,v);}}
  const push=async(content,target=binding.chatid)=>{if(!client.isConnected)throw Error('WeCom disconnected');
-  let clipped='';for(const char of String(content)){if(Buffer.byteLength(clipped+char,'utf8')>3800)break;clipped+=char;}
-  ack(await client.sendMessage(target,{msgtype:'markdown',markdown:{content:clipped}}));};
+  let chunk='';for(const char of String(content)){
+   if(Buffer.byteLength(chunk+char,'utf8')>3800){ack(await client.sendMessage(target,{msgtype:'markdown',markdown:{content:chunk}}));chunk='';}
+   chunk+=char;
+  }
+  if(chunk)ack(await client.sendMessage(target,{msgtype:'markdown',markdown:{content:chunk}}));};
  let handling=false,sending=false,activeRecord;
  async function processInbox(){
   if(handling||!client.isConnected)return;handling=true;
@@ -99,11 +91,11 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
     try{
      const direct=await handleContentMessage({reply:async(_sender,text)=>{v.reply=text;write(p,v);}},
        {text:v.text,id:'wecom:'+v.msgid,senderId:v.user_id});
-     const publication='\n\n最新送审要求：视频先保存视频号草稿箱、读回草稿记录，再发送该草稿真实手机预览二维码/链接。缺少预览就停止待审，不用 MP4 代替，不公开发布。只有来源会话真实确认绑定版本并生成 video-publish-approval.json 后，才进入发布处理；公众号文章仍只发送官方文章预览，不顺带公开发布。'+(direct?.publish_request?'\n本条真实用户已确认已发送的手机预览；只处理以下绑定版本的视频发布请求。先核对 video-publish-approval.json、manifest 和目标账号；已有发布记录或结果不明时只查记录，不重复执行。仅在工具策略允许时使用已授权发布工具，保存真实结果并回到本条来源会话。\n'+JSON.stringify(direct.publish_request):'');
-     if(!direct||direct.publish_request){
+     const draftInstruction='\n\n最新送审要求：先把 MP4 文件和实际视频名、完整简介、目标账号发回来源会话，等用户看完回复 OK 后才上传视频号草稿箱。不再要求手机预览二维码；本流程不授权公开发布。上传必须显式 syncDraft:true，并使用已审核的同一版本、标题、简介和目标账号。完成后向来源会话列出视频名、视频简介、文件名、版本、目标账号、草稿上传实际结果和记录号；不能只发完成通知或把本地入库说成草稿成功。'+(direct?.draft_request?'\n本条真实用户已确认收到的视频文件；只处理以下草稿上传请求。先核对 video-draft-approval.json、manifest 与 video-metadata.json；旧记录或结果不明时先查记录，不重复执行。仅在工具策略允许时保存草稿，不公开发布。\n'+JSON.stringify(direct.draft_request):'');
+     if(!direct||direct.draft_request){
       const prompt=(v.chattype==='single'?'来自已确认群成员的企业微信私聊任务。':'来自已授权企业微信群成员 @ 机器人的用户任务。')+'消息凭据 wecom:'+v.msgid+'；发起人 '+v.user_id+'。先读工作区 AGENTS.md。进度、最终答复、文章链接和视频附件全部回到本条消息的来源会话；私聊回本人，群消息回原群，不跨会话发送。关键阶段使用简短 commentary 给用户说明正在处理什么；这些内容会实时转发到来源会话。需要用户选方向、音色或试听确认时，先给真实小样或关键问题，在最终回复中明确等待选择后停止，收到下一条回复再继续，不要擅自全部做完才问。成品用 studio.py deliver，出站目的地由当前入站消息决定，禁止手动改成审核群、旧微信群或自动公开发布。只处理本条新任务，不补发历史稿件。\n\n'+v.text;
       if(!runTask)throw Error('Codex runner is not configured');
-      const result=await runTask(prompt+publication,{messageId:v.msgid,onProgress:async text=>{
+      const result=await runTask(prompt+draftInstruction,{messageId:v.msgid,onProgress:async text=>{
        v.progress=v.progress||[];const prior=v.progress.find(s=>s.text===text);if(prior)return prior.status==='sent';
        const progress={text,status:'sending',at:now()};v.progress.push(progress);write(p,v);
        try{await push(text,replyTarget(v,binding));progress.status='sent';progress.sent_at=now();}catch(error){progress.status='delivery_unknown';onError(error,'progress_delivery');}
@@ -136,7 +128,7 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
   if(sending||!client.isConnected)return;sending=true;
   try{for(const name of fs.readdirSync(outbox).filter(n=>n.endsWith('.json')).sort()){
    const p=path.join(outbox,name),v=read(p);if(!eligible(v,binding,sourceOf(v),knownMembers))continue;
-   let files,images;try{files=validateFiles(v,studio);images=validatePhonePreviewImages(v,studio);}catch(error){v.status='failed';v.error=error.message;write(p,v);continue;}
+   let files;try{files=validateFiles(v,studio);validateVideoReview(v,studio);}catch(error){v.status='failed';v.error=error.message;write(p,v);continue;}
    const cancelled=()=>{if(!v.source_message_id)return false;const source=path.join(inbox,digest(v.source_message_id)+'.json');return fs.existsSync(source)&&!!read(source).interrupt_requested_by;};
    if(cancelled()){v.status='cancelled';write(p,v);continue;}
    v.status='sending';v.steps=v.steps||[];write(p,v);
@@ -144,16 +136,6 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
     if(!v.steps.some(s=>s.step==='text'&&s.errcode===0)){
      await push(v.text,v.destination.chatid);v.steps.push({step:'text',errcode:0,at:now()});write(p,v);
     }
-    for(let i=0;i<images.length;i++){
-     if(v.steps.some(s=>s.step==='image:'+i&&s.errcode===0))continue;
-     v.stage='uploading_image';write(p,v);
-     const upload=await client.uploadMedia(images[i].bytes,{type:'image',filename:images[i].filename});
-     if(!upload.media_id)throw Error('Phone preview image upload returned no media ID');
-     if(cancelled()){const e=new Error('Delivery cancelled by user interruption');e.code='DELIVERY_CANCELLED';throw e;}
-     v.stage='sending_image';write(p,v);ack(await client.sendMediaMessage(v.destination.chatid,'image',upload.media_id));
-     v.steps.push({step:'image:'+i,errcode:0,at:now()});write(p,v);
-    }
-    if(v.phone_preview_sha256&&!v.phone_preview_sent_at){v.phone_preview_sent_at=now();write(p,v);}
     for(let i=0;i<files.length;i++){
      if(v.steps.some(s=>s.step==='file:'+i&&s.errcode===0))continue;
      v.stage='preparing_media';write(p,v);
@@ -169,7 +151,7 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
      v.steps.push({step:'file:'+i,media_type:'file',filename:media.filename,errcode:0,at:now()});write(p,v);
     }
     v.status='sent';v.stage='completed';v.sent_at=now();v.recipient_confirmation='pending';write(p,v);
-   }catch(error){v.status=error.code==='DELIVERY_CANCELLED'?'cancelled':['uploading','uploading_image','preparing_media'].includes(v.stage)?'upload_failed':'delivery_unknown';v.error=errorDetails(error);v.failed_at=now();write(p,v);onError(error,'production_delivery');}
+   }catch(error){v.status=error.code==='DELIVERY_CANCELLED'?'cancelled':['uploading','preparing_media'].includes(v.stage)?'upload_failed':'delivery_unknown';v.error=errorDetails(error);v.failed_at=now();write(p,v);onError(error,'production_delivery');}
   }}finally{sending=false;}
  }
  const timer=setInterval(()=>{void processInbox();void processOutbox().catch(e=>onError(e,'outbox'));},3000);

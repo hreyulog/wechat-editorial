@@ -30,22 +30,20 @@
 
 不要编辑 outbox/*.json 或机器人的 state；发送器独占这些状态。执行或发送结果不明时保留 outcome_unknown/delivery_unknown，不能盲目重试。上传明确失败可由操作员依据真实错误解除后重新入队。查询用 `status C编号` / `status`；群里 `进度 C编号` / `任务列表` 直接由路由处理。
 
-审核命令：`通过 C编号-vN` 记录真实用户消息凭据，保持 published:false。`修改 C编号 …` 新建版本，保留旧版。`草稿链接 C编号-vN https://...` 仅登记该入站用户直接给出的官方预览。不要自行生成或代替用户执行“通过”。
+审核命令：纯文章的 `通过 C编号-vN` 记录审核；视频的确认规则见下节，始终保持 published:false。`修改 C编号 …` 新建版本，保留旧版。`草稿链接 C编号-vN https://...` 仅登记该入站用户直接给出的官方预览。不要自行生成或代替用户执行“通过”。
 
-## 视频手机预览后确认发布
+## 视频文件审核后上传草稿
 
-用户最新要求：每个视频做好后，先保存到视频号草稿箱并用实际发布记录读回确认，再取得该草稿的后台手机预览二维码或链接，发回本条任务的来源会话，等用户确认后再发布。用 MCP create_video 或已启用的本地适配器入库后，保存草稿明确指定 syncDraft:true；本地入库不等于草稿箱成功。MP4 附件、封面、后台编辑地址、本地网页都不能冒充手机预览。没有真实预览时停在 awaiting_video_phone_preview，明确说明缺少预览，不公开发布。现有 TurboPush MCP 未提供独立获取手机预览的工具，不得编造链接、接口或二维码，也不得为获取预览绕过站点策略。
+用户最新要求：视频做好后，先把实际 MP4 文件以及视频名、完整简介、目标视频号和版本发回来源会话；用户看完回复 OK 后才上传视频号草稿箱。不再要求后台手机预览二维码。本流程仅授权保存草稿，不能把 OK 当作公开发布授权。
 
-已合法取得的真实预览按 ../../docs/PHONE-PREVIEW-REVIEW.md 保存来源回执，再运行 `studio.py phone-preview C编号 --version N --receipt jobs/C编号/vN/remote-phone-preview.json`，接着 deliver。二维码在 src 内保存 PNG/JPEG，发送器按 image 类型发送；同时保留 MP4 file 附件。预览绑定具体 manifest、视频哈希、目标账号与远端草稿/预览标识。过期或修改后需要重新取得并发送，不能沿用旧确认。
+每个视频版本必须有 video-metadata.json，含 title、description 和 account；account 优先用 MCP 返回的目标账号 id/name。标题和简介写准备实际上传的完整内容，不能只写选题占位。build 将文案加入 manifest，deliver 在文本中列出视频名、完整简介、目标账号、C编号-vN.mp4，并以 file 附件发送 MP4。送审后修改文案或视频都要 revise，新版本重新送审。
 
-用户回复 `确认发布 C编号-vN` 后，路由核对真实入站凭据、来源会话及已经发出的预览，生成 video-publish-approval.json，再把绑定的 publish_request 交给 Codex 处理。该版本的 `通过 C编号-vN` 也视作确认视频发布；有多个待审版本时必须指定编号，只有一个时接受“ok/可以发布/发布吧”。这只授权视频，不能顺带公开发布公众号文章。重复确认不重复提交。执行仍遵守工具策略，发布后以真实记录确认结果；结果不明时查记录、不盲目重发。禁止自动处理历史稿件或用模型生成的“通过”冒充用户确认。
+用户回复 `OK C编号-vN` 或 `确认上传 C编号-vN` 后，路由验证真实入站、来源会话、已发送的文件成功回执和当前版本哈希，生成 video-draft-approval.json 与 draft_request。只有当前会话恰好一个未确认当前视频时接受单独 OK。视频的“通过 C编号-vN”同样只授权草稿上传；纯文章仍只记录审核。重复确认不重复提交。
 
-最终答复简短列任务编号、产物和真实发送状态。已由队列发送的文件不要用其他渠道再发。Linux 版尚未实际部署验收；遇到运行问题保存证据并如实报告，不沿用 Windows 历史成功结论。
+执行器核对审核回执、manifest、video-metadata.json，使用已审核的同一视频、标题、简介和目标账号，通过 TurboPush MCP publish_video 明确设置 syncDraft:true。已有本地内容时先查 id 与实际文案；本地入库不等于视频号草稿成功。结果不明先查 list_records/get_record_info，不盲目重试，不处理历史稿件。
 
-用户已授权把选定视频自动上传到指定视频号草稿箱，无需逐次确认保存草稿，也不规定必须由用户手动点击 TurboPush。现有 TurboPush 适配器仅保存本地内容库，默认关闭，尚未实现视频号远端上传；登录状态、本地内容 ID 和 syncDraft:true 都不是视频号草稿回执。
+最终答复必须列出：视频名、完整视频简介、目标视频号、任务版本、文件名、实际草稿上传状态和记录号。失败或结果不明如实说明；只有真实记录成功才能说已上传草稿箱。已由队列发送的文件不重复发。公众号继续发送真实官方草稿预览链接，不能由视频确认顺带公开发布文章。
 
-可选 TurboPush MCP 配置在 state/turbopush-mcp.json，由执行器显式加载为 turbo_push；配置方法见 ../../docs/TURBOPUSH-MCP.md。启用后暴露与工作机一致的 21 个工具，包括 publish_video/publish_article/publish_graph_text、close_browser、平台设置增删改和内容删除。查询优先使用 MCP，已有 turbopush-local.json 时用其 id 查询，避免重复创建。删除内容或平台设置必须由用户当次明确点名。MCP 是否接入与远端上传结果必须分别说明，不能把本地脚本的能力局限说成 TurboPush MCP 的能力局限。
+可选 TurboPush MCP 配置在 state/turbopush-mcp.json，由执行器显式加载为 turbo_push，方法见 ../../docs/TURBOPUSH-MCP.md。启用后暴露与工作机一致的 21 个工具，包括 publish_video。查询优先用 MCP，已有 turbopush-local.json 时用其 id 避免重复创建。删除内容或平台设置必须由用户当次明确点名。
 
-视频调用前核对版本清单、实际文件与目标账号，保存草稿和公开发布按明确授权区分。执行后用 list_records/get_record_info 核对真实记录及状态；工具可见、本地 id、syncDraft 参数和调用受理都不能代替成功回执。结果不明不得自动重复执行。只有上述真实手机预览确认可以授权视频发布，普通文章审核不授权发布。
-
-工作机直接访问视频号后台曾被浏览器工具以 Site-safety policy blocks this action 拒绝。不得通过 TurboPush 或其他工具间接绕过该限制。受阻时说明具体工具限制和“尚未上传”，不要只用“按工作区规则需手动同步”搪塞，也不要误称缺少用户授权。Linux 包不承诺桌面 TurboPush 可用；MCP 工具配置已包含发布入口，实际执行仍需满足部署环境的授权和工具策略。自动保存草稿与公开发布分开，公开发布需对应明确指令。
+执行仍遵守实际工具和站点策略，遇到拒绝保留对应工具的实际错误，不通过其他路径绕过。区分浏览器、MCP、本地入库、远端草稿和公开发布的实际结果，不把未调用工具的推断当作原始报错。Linux 版未实机运行验收，不能沿用 Windows 历史成功结论。详细格式见 ../../docs/VIDEO-REVIEW.md。

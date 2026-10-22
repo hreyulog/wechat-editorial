@@ -2,7 +2,7 @@ export function controlIntent(text){
  if(/^(?:新任务|另一个任务|排队任务)\s*[:：]/.test(text))return {action:'queue',text:text.replace(/^[^:：]+[:：]\s*/,'')};
  if(/^(?:停止|停下|暂停|取消|打断|别做了|先停下|stop)(?:[吧了]?|当前(?:任务|制作)?)?[。！!\s]*$/i.test(text))return {action:'interrupt',resume:false,text:''};
  if(/^(?:打断|中断并修改|停止并修改)\s*[:：,，]?\s*\S/.test(text))return {action:'interrupt',resume:true,text:text.replace(/^(?:打断|中断并修改|停止并修改)\s*[:：,，]?\s*/,'')};
- if(/^(?:(?:通过|确认发布|发布|ok)\s+C\d+-v\d+|草稿链接\s+|\/reviewlink\s+)/i.test(text)||/^(?:ok|确认发布|可以发布|发布吧)[。！!\s]*$/i.test(text))return {action:'queue',text};
+ if(/^(?:(?:通过|确认上传|上传草稿|ok)\s+C\d+-v\d+|草稿链接\s+|\/reviewlink\s+)/i.test(text)||/^(?:ok|确认上传|可以上传|上传草稿)[。！!\s]*$/i.test(text))return {action:'queue',text};
  return {action:'steer',text};
 }
 
