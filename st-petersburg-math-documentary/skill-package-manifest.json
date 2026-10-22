@@ -13,23 +13,18 @@
     },
     {
       "path": "README.md",
-      "bytes": 2984,
-      "sha256": "27a79fe63845ee0ece1ffe625db91c9870c862f0dc0c804a84666dc7e61de8da"
+      "bytes": 3396,
+      "sha256": "fe2a45be9920d8c0005a4457a8deaad48a867ad5f856358df591d87b051132f4"
     },
     {
       "path": "SKILL.md",
-      "bytes": 5385,
-      "sha256": "8ce4edb233a0c7deea33e2229512f0f0bf67ef2aa08f71d737acd82b10d7d792"
-    },
-    {
-      "path": "requirements.txt",
-      "bytes": 47,
-      "sha256": "d17cad6c014226e793d2e65b908a49c067305eb1b8337139fb5914b0254c5b46"
+      "bytes": 6683,
+      "sha256": "01a38cae326f4fa44766cc13c031b0c210a65106b20b49f35e72770a7df6bb1f"
     },
     {
       "path": "agents/openai.yaml",
-      "bytes": 384,
-      "sha256": "3c44ab5884da84f2dcf5f3256914a2b9ede8fd476c44f3cf54044349acdf4ef5"
+      "bytes": 538,
+      "sha256": "6b85b60ece9441836ab99cae42b8394c7897c1db3ae856ef4dfab446e6870bd3"
     },
     {
       "path": "examples/project.example.json",
@@ -37,29 +32,9 @@
       "sha256": "44888455be9e8c03dd0a878b0c321578209a2793a927a16a8a3ccda8007c33aa"
     },
     {
-      "path": "scripts/runtime_support.py",
-      "bytes": 4042,
-      "sha256": "90780777fb8219cce95c6b0ed2cbf8bbb61b5ee4e65904c93d9552ea58fd1a3d"
-    },
-    {
-      "path": "scripts/voice_runtime.py",
-      "bytes": 12140,
-      "sha256": "0495e96ba297376491721d208167b6c06f7378a9bd8d61be004041f0f92c66cc"
-    },
-    {
-      "path": "scripts/video_runtime.py",
-      "bytes": 41415,
-      "sha256": "851415b1b99b3b5a2512f1060cf52c2f1977201a21d73f486531d72596bffb21"
-    },
-    {
-      "path": "scripts/smoke_test.py",
-      "bytes": 3483,
-      "sha256": "bb8f6e103659e41ddb029c1fd20b67b06d247487198d32e18c753b11ccbf59a4"
-    },
-    {
-      "path": "references/production-workflow.md",
-      "bytes": 1912,
-      "sha256": "992850e84e05af669afa44bacd00c59cb324b61d07a61b0941cbca2cee4c3f70"
+      "path": "references/chebyshev-case.md",
+      "bytes": 2083,
+      "sha256": "c66aeffe0c1c8a2521dbf50a47d25dd400a8f5b5e7cd79cde0ce04f98b9eb3d6"
     },
     {
       "path": "references/mobile-and-audio.md",
@@ -67,14 +42,45 @@
       "sha256": "4e7c0b97ca885abd3ac0d4459d32b439ebf655c1fd0927e0d9f431d73ef5cc9b"
     },
     {
+      "path": "references/petersburg-series.md",
+      "bytes": 3134,
+      "sha256": "dbda3b666e5954d40c7d8339b78167aa8ad8312e835b1b99c49b01e86d61dac1"
+    },
+    {
+      "path": "references/production-workflow.md",
+      "bytes": 1912,
+      "sha256": "992850e84e05af669afa44bacd00c59cb324b61d07a61b0941cbca2cee4c3f70"
+    },
+    {
       "path": "references/verification.md",
       "bytes": 2078,
       "sha256": "da2ad55ce0b5e169950336408949691d056a7ac7eb93687ddec78a6c38c5dea6"
     },
     {
-      "path": "references/chebyshev-case.md",
-      "bytes": 1785,
-      "sha256": "acc892385022d01da90ef6bd9b85ab80c716684a3eac2c52d0e2f3abd7d475a0"
+      "path": "requirements.txt",
+      "bytes": 47,
+      "sha256": "d17cad6c014226e793d2e65b908a49c067305eb1b8337139fb5914b0254c5b46"
+    },
+    {
+      "path": "scripts/runtime_support.py",
+      "bytes": 4042,
+      "sha256": "90780777fb8219cce95c6b0ed2cbf8bbb61b5ee4e65904c93d9552ea58fd1a3d"
+    },
+    {
+      "path": "scripts/smoke_test.py",
+      "bytes": 3483,
+      "sha256": "bb8f6e103659e41ddb029c1fd20b67b06d247487198d32e18c753b11ccbf59a4"
+    },
+    {
+      "path": "scripts/video_runtime.py",
+      "bytes": 41415,
+      "sha256": "851415b1b99b3b5a2512f1060cf52c2f1977201a21d73f486531d72596bffb21"
+    },
+    {
+      "path": "scripts/voice_runtime.py",
+      "bytes": 12140,
+      "sha256": "0495e96ba297376491721d208167b6c06f7378a9bd8d61be004041f0f92c66cc"
     }
-  ]
+  ],
+  "updated_at": "2026-10-23"
 }

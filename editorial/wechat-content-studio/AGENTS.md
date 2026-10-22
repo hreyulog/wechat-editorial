@@ -10,6 +10,8 @@
 
 仓库根目录在本目录上两层。数学知识动画先读 `../../math-explainer-animation/SKILL.md`；人物纪录片读 `../../st-petersburg-math-documentary/SKILL.md`；端到端流程读 `../../wechat-editorial-workflow/SKILL.md`。按题目重新调研可靠来源和编写脚本，记录实际访问情况，不改旧案例标题冒充新作品。用户当次的时长、版式、声音要求优先。默认竖屏；知识动画无指定音乐可静音，人物片按其 Skill 处理配音和双语字幕。
 
+已有数学人物系列中，“做马尔可夫的视频”“下一期做某位数学家”默认是人物纪录片；只有明确要求马尔可夫链、定理或算法原理才用知识动画。人物片先读仓库 Skill 的 references/petersburg-series.md，延续切比雪夫的“人物故事＋史料幻灯片＋克制配乐＋已选音色＋参考字幕”，在本期 brief 写 series_style 与参考版本。不得让静音/SVG/10–15秒知识试片的默认覆盖人物片，也不能把通用深色知识卡模板冒充同系列风格。
+
 版本位于 `jobs/C编号/vN`。文章 `article.json` 含 title、subtitle、sections（heading、paragraphs）、sources（title、url）、fact_check（checked、notes）。历史、年代、数学条件及归属必须核对，推断与史实分开。视频源文件写 `src/index.tsx`，注册 Remotion composition `ReviewVideo`；逐帧驱动。需要导入独立视频时使用 `src/video-import.json`，源文件必须在本版本 src 内并记录 SHA256、帧数、宽高和 fps；不得引用其他项目的任意私人文件。
 
 `build C编号` 实际生成排版、封面、MP4、完整解码、编码关键帧及 manifest。必须实际查看最终图片/编码帧，修复后重建，再写 visual-review.json（checked:true、notes）。未实际查看、未听审的项目如实标未执行，不能自动勾选。已入队或审核的版本不能原地覆盖；修改用 `revise C编号 --note "意见"` 生成下一版本。

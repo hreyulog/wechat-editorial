@@ -18,7 +18,7 @@ description: 接收企业微信群 @ 任务及已确认成员的私聊任务，�
 ## 制作到审核
 
 1. 读工作室 [AGENTS.md](../editorial/wechat-content-studio/AGENTS.md) 和现有任务状态，确认新任务或修改版本。创建 `C编号-vN`，保存 brief、来源、脚本、分镜。
-2. 数学思想用 [数学动画 Skill](../math-explainer-animation/SKILL.md)，人物用 [纪录片 Skill](../st-petersburg-math-documentary/SKILL.md)。用户明确要求完整视频时按要求制作；没有明确全片要求时遵循对应 Skill 的试片约定。
+2. 数学思想用 [数学动画 Skill](../math-explainer-animation/SKILL.md)，人物用 [纪录片 Skill](../st-petersburg-math-documentary/SKILL.md)。已有系列中的裸人物选题默认人物片；只有明确要求讲马尔可夫链等概念才转知识动画。人物片先读[系列风格](../st-petersburg-math-documentary/references/petersburg-series.md)，沿用切比雪夫的人物叙事、史料幻灯片、克制配乐和已选声音/字幕。用户明确要求完整视频时按要求制作；没有明确全片要求时遵循对应 Skill 的试片约定。
 3. 写实际源文件并 build。完整解码、抽取真实编码帧，实际查看画面。史实、数学、许可、字幕、声音逐项如实记录；未听审不标通过。
 4. 文章经上游排版工具生成内联样式；prepare 后查看官方正文的本地截图并绑定 HTML 哈希；submit 仅调用官方草稿接口创建一次，再 draft/get 取得真实预览链接。未知创建结果不自动再建。
 5. 视频在 video-metadata.json 写实际 title、完整 description、目标 account（优先 id/name），随 build 绑定 manifest。按 [视频审核后上传草稿](../docs/VIDEO-REVIEW.md) 先 deliver MP4 file 附件和完整文案；文章发真实官方草稿预览。全部回来源会话：私聊回本人、群消息回原群。视频超过传输预算时生成完整时长小副本，保留原片。文本已成功而附件明确失败仅续传附件，未知结果不自动重发。

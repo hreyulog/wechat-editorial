@@ -9,6 +9,8 @@
 
 当次用户要求优先。数学动画使用Remotion、React、TypeScript与SVG，让对象变化承担解释；人物版结合史料、照片、视频与图解。
 
+机器人延续切比雪夫系列时，“做一个马尔可夫的视频”等裸人物选题默认走人物纪录片，使用[人物系列风格](../st-petersburg-math-documentary/references/petersburg-series.md)：人物故事、史料幻灯片、克制音乐、已选声音和参考字幕。下方“马尔可夫链”示例仅适用于用户明确要求知识点讲解的情况。音色转换样本、音乐素材与完整成片不进入源码包，新机器须提供相应授权本地资源。
+
 数学动画当前默认采用严肃、克制的教学风格，以稳定构图、自然缓动和理解停顿组织画面。已接入[上游方法与版本记录](../math-explainer-animation/references/upstream-methods.md)：Remotion官方技术指引、animation-basics动作原理、中文过程动画参考。它们按需读取，调研与数学核对仍由本Skill承担；外部技能源文件不在本仓库重新分发。
 
 ## 给一个题目，开始制作数学动画
@@ -34,8 +36,8 @@ $math-explainer-animation
 先克隆仓库：
 
 ```sh
-git clone https://github.com/hreyulog/math-documentary-skill.git
-cd math-documentary-skill
+git clone https://github.com/hreyulog/wechat-editorial.git
+cd wechat-editorial
 ```
 
 将整个 `st-petersburg-math-documentary` 文件夹复制到个人 Codex skills 目录。Windows PowerShell：

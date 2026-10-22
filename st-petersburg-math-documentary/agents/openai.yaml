@@ -1,4 +1,4 @@
 interface:
   display_name: "圣彼得堡数学人物纪录片"
   short_description: "人物生平、中文男声、中英字幕、竖屏成片与可播放交付"
-  default_prompt: "用 $st-petersburg-math-documentary 制作一位数学家的中文竖屏人物纪录片。先核实史实与素材许可，再交付中文男声、上下中英字幕的可播放成片和完整来源。"
+  default_prompt: "用 $st-petersburg-math-documentary 制作数学人物纪录片。延续切比雪夫系列时先读 references/petersburg-series.md，沿用人物故事、史料幻灯片、克制配乐、已选配音及参考字幕；不要自动改成定理或概率教学动画。核实新人物史实与素材许可，交付真实 MP4 和本期来源及核对报告。"
