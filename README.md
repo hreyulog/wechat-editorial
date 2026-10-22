@@ -1,6 +1,6 @@
 # wechat-editorial
 
-在企业微信群 @ 机器人发任务，由 Codex 制作公众号文章和视频，把**公众号官方草稿预览链接和 MP4 文件附件**送回同群审核。
+在企业微信群 @ 机器人发任务，或由已确认的群成员私聊机器人，由 Codex 制作公众号文章和视频。**进度、公众号官方草稿预览链接和 MP4 文件附件全部回到消息来源：私聊回本人，群消息回原群。**
 
 指定群里的所有成员都可以 @ 使用。收到任务立即回复“收到，处理中”；制作结果排队发送，审核通过只做记录，不自动公开发布。
 
@@ -28,7 +28,7 @@ npm run bot
 
 | 入口 | 用途 |
 |---|---|
-| [wechat-editorial-workflow](wechat-editorial-workflow/SKILL.md) | 群任务、文章与视频、官方草稿、同群送审、修改与审核 |
+| [wechat-editorial-workflow](wechat-editorial-workflow/SKILL.md) | 群聊/私聊任务、文章与视频、官方草稿、原会话送审、修改与审核 |
 | [math-explainer-animation](math-explainer-animation/SKILL.md) | 数学知识动画，Remotion / React / TypeScript / SVG |
 | [st-petersburg-math-documentary](st-petersburg-math-documentary/SKILL.md) | 人物纪录片、中文配音、中英字幕与真实媒体核对 |
 | [工作室说明](editorial/wechat-content-studio/AGENTS.md) | 实际文件格式、版本、构建、草稿及发送命令 |

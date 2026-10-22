@@ -154,6 +154,10 @@ def deliver(job_id, version=None):
                               'blocker': 'Official WeChat draft preview link is not available'}
     text = f'{job_id}-v{number}｜{job["topic"]}\n' + '\n'.join(parts)
     destination = CONFIG.get('review_destination', {'provider': 'desktop_wechat', 'group': CONFIG['group']})
+    active_path = ROOT/'state/active-wecom-task.json'
+    source = read(active_path) if active_path.exists() else {}
+    if source.get('chattype') in ('single', 'group') and source.get('reply_to'):
+        destination = {'provider': 'wecom', 'chatid': source['reply_to']}
     text += f'\n审核意见请 @ 机器人：修改 {job_id} …；通过 {job_id}-v{number}。'
     media_type = 'file' if destination.get('provider') == 'wecom' else 'video'
     signature = hashlib.sha256(json.dumps({'text': text, 'files': files, 'destination': destination, 'media_type': media_type}, sort_keys=True).encode()).hexdigest()[:16]
@@ -166,7 +170,7 @@ def deliver(job_id, version=None):
                        and prior.get('status') not in ('failed', 'cancelled') for f in prior.get('files', [])}
         files = [f for f in files if f['sha256'] not in prior_files]
         write(path, {'job_id': job_id, 'version': number, 'group': CONFIG['group'], 'text': text,
-                     'destination': destination, 'media_type': media_type, 'source_message_id': read(ROOT/'state/active-wecom-task.json').get('msgid') if (ROOT/'state/active-wecom-task.json').exists() else None, 'files': files, 'status': 'queued', 'created_at': now(), 'steps': []})
+                     'destination': destination, 'media_type': media_type, 'source_message_id': source.get('msgid'), 'files': files, 'status': 'queued', 'created_at': now(), 'steps': []})
     if job['kind'] == 'video' or official.exists(): set_status(job, 'awaiting_review')
     return {'job_id': job_id, 'version': number, 'status': job['status'], 'outbox': str(path), 'delivery': read(path)['status']}
 

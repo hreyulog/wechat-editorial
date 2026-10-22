@@ -9,14 +9,22 @@ const read=p=>JSON.parse(fs.readFileSync(p,'utf8').replace(/^\uFEFF/,''));
 const now=()=>new Date().toISOString();
 const digest=b=>crypto.createHash('sha256').update(b).digest('hex');
 export function write(p,v){const t=p+'.'+crypto.randomUUID()+'.tmp';fs.writeFileSync(t,JSON.stringify(v,null,2));fs.renameSync(t,p);}
-export function authorized(body,binding,botId){
- return binding.enabled===true && (!body.aibotid||body.aibotid===botId) && body.chattype==='group'
-  && body.chatid===binding.chatid && !!body.from?.userid
-  && (binding.group_members==='all'||binding.user_ids?.includes(body.from.userid)) && !!body.msgid;
+export function authorized(body,binding,botId,knownMembers=new Set()){
+ if(binding.enabled!==true||(body.aibotid&&body.aibotid!==botId)||!body.from?.userid||!body.msgid)return false;
+ if(body.chattype==='single')return binding.private_messages==='known_members'
+  && (binding.private_user_ids?.includes(body.from.userid)||knownMembers.has(body.from.userid));
+ return body.chattype==='group' && body.chatid===binding.chatid
+  && (binding.group_members==='all'||binding.user_ids?.includes(body.from.userid));
 }
+export const replyTarget=(record,binding)=>record.chattype==='single'?record.user_id:binding.chatid;
 export function taskText(content){return String(content||'').trim().replace(/^(?:<@[^>]+>|@\S+)[\s\u2005]+/,'').trim();}
-export function eligible(item,binding){return item.status==='queued' && item.destination?.provider==='wecom'
- && item.destination.chatid===binding.chatid && Date.parse(item.created_at)>=Date.parse(binding.activated_at);}
+export function eligible(item,binding,source,knownMembers=new Set()){
+ if(item.status!=='queued'||item.destination?.provider!=='wecom'||!(Date.parse(item.created_at)>=Date.parse(binding.activated_at)))return false;
+ if(source?.chattype==='single')return source.msgid===item.source_message_id
+  && item.destination.chatid===source.user_id
+  && authorized({...source,from:{userid:source.user_id}},binding,undefined,knownMembers);
+ return item.destination.chatid===binding.chatid;
+}
 export function validateFiles(item,studio){
  if(!/^C\d{4,}$/.test(item.job_id)||!Number.isInteger(item.version)||item.version<1)throw Error('Invalid outbox job');
  const folder=fs.realpathSync(path.join(studio,'jobs',item.job_id,'v'+item.version));
@@ -43,6 +51,10 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
  const binding=read(bindingPath),studio=path.resolve(root,'../wechat-content-studio');
  if(binding.bot_id_sha256!==digest(botId))throw Error('Bot credentials do not match approved binding');
  const inbox=path.join(stateDir,'inbox');fs.mkdirSync(inbox,{recursive:true});
+ const knownMembers=new Set();
+ for(const name of fs.readdirSync(inbox).filter(n=>n.endsWith('.json'))){const v=read(path.join(inbox,name));
+  if(v.chatid===binding.chatid&&v.chattype!=='single'&&v.user_id
+   && (binding.group_members==='all'||binding.user_ids?.includes(v.user_id)))knownMembers.add(v.user_id);}
  const statusPath=path.join(stateDir,'production.json');
  const status={phase:'waiting_for_group_task',started_at:now(),historical_backlog_enabled:false};
  const save=()=>write(statusPath,{...status,updated_at:now()});save();
@@ -50,29 +62,30 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
  for(const name of fs.readdirSync(inbox).filter(n=>n.endsWith('.json'))){const p=path.join(inbox,name),v=read(p);
   if(['running','replying'].includes(v.status)){v.status='outcome_unknown';write(p,v);}}
  const outbox=path.join(studio,'outbox');
+ const sourceOf=item=>{if(!item.source_message_id)return undefined;const p=path.join(inbox,digest(item.source_message_id)+'.json');return fs.existsSync(p)?read(p):undefined;};
  for(const name of fs.readdirSync(outbox).filter(n=>n.endsWith('.json'))){const p=path.join(outbox,name),v=read(p);
-  if(v.destination?.provider==='wecom'&&v.destination.chatid===binding.chatid&&v.status==='sending'){
+  if(v.status==='sending'&&eligible({...v,status:'queued'},binding,sourceOf(v),knownMembers)){
    v.status='delivery_unknown';v.error='Service restarted during send; manual reconciliation required';write(p,v);}}
- const push=async content=>{if(!client.isConnected)throw Error('WeCom disconnected');
+ const push=async(content,target=binding.chatid)=>{if(!client.isConnected)throw Error('WeCom disconnected');
   let clipped='';for(const char of String(content)){if(Buffer.byteLength(clipped+char,'utf8')>3800)break;clipped+=char;}
-  ack(await client.sendMessage(binding.chatid,{msgtype:'markdown',markdown:{content:clipped}}));};
+  ack(await client.sendMessage(target,{msgtype:'markdown',markdown:{content:clipped}}));};
  let handling=false,sending=false,activeRecord;
  async function processInbox(){
   if(handling||!client.isConnected)return;handling=true;
   try{
    const names=fs.readdirSync(inbox).filter(n=>n.endsWith('.json')).sort((a,b)=>Number(!!read(path.join(inbox,b)).priority)-Number(!!read(path.join(inbox,a)).priority)||String(read(path.join(inbox,a)).received_at).localeCompare(String(read(path.join(inbox,b)).received_at)));
    for(const name of names){const p=path.join(inbox,name),v=read(p);if(v.status!=='queued')continue;
-    v.status='running';v.started_at=now();write(p,v);activeRecord={p,v};write(path.join(studio,'state/active-wecom-task.json'),{msgid:v.msgid,user_id:v.user_id,started_at:v.started_at});status.phase='processing';status.active_message=v.msgid;save();
+    v.status='running';v.started_at=now();write(p,v);activeRecord={p,v};write(path.join(studio,'state/active-wecom-task.json'),{msgid:v.msgid,user_id:v.user_id,chattype:v.chattype||'group',reply_to:replyTarget(v,binding),started_at:v.started_at});status.phase='processing';status.active_message=v.msgid;save();
     try{
      const direct=await handleContentMessage({reply:async(_sender,text)=>{v.reply=text;write(p,v);}},
        {text:v.text,id:'wecom:'+v.msgid,senderId:v.user_id});
      if(!direct){
-      const prompt='来自已授权企业微信群成员 @ 机器人的用户任务。消息凭据 wecom:'+v.msgid+'；发起人 '+v.user_id+'。本群全体成员均已获准发起制作及修改任务。先读工作区 AGENTS.md。关键阶段使用简短 commentary 给群成员说明正在处理什么；这些内容会实时转发。需要用户选方向、音色或试听确认时，先给真实小样或关键问题，在最终回复中明确等待选择后停止，收到下一条回复再继续，不要擅自全部做完才问。成品用 studio.py deliver 入队到已绑定企业微信群，禁止发到旧微信群或自动公开发布。只处理本条新任务，不补发历史稿件。\n\n'+v.text;
+      const prompt=(v.chattype==='single'?'来自已确认群成员的企业微信私聊任务。':'来自已授权企业微信群成员 @ 机器人的用户任务。')+'消息凭据 wecom:'+v.msgid+'；发起人 '+v.user_id+'。先读工作区 AGENTS.md。进度、最终答复、文章链接和视频附件全部回到本条消息的来源会话；私聊回本人，群消息回原群，不跨会话发送。关键阶段使用简短 commentary 给用户说明正在处理什么；这些内容会实时转发到来源会话。需要用户选方向、音色或试听确认时，先给真实小样或关键问题，在最终回复中明确等待选择后停止，收到下一条回复再继续，不要擅自全部做完才问。成品用 studio.py deliver，出站目的地由当前入站消息决定，禁止手动改成审核群、旧微信群或自动公开发布。只处理本条新任务，不补发历史稿件。\n\n'+v.text;
       if(!runTask)throw Error('Codex runner is not configured');
       const result=await runTask(prompt,{messageId:v.msgid,onProgress:async text=>{
        v.progress=v.progress||[];const prior=v.progress.find(s=>s.text===text);if(prior)return prior.status==='sent';
        const progress={text,status:'sending',at:now()};v.progress.push(progress);write(p,v);
-       try{await push(text);progress.status='sent';progress.sent_at=now();}catch(error){progress.status='delivery_unknown';onError(error,'progress_delivery');}
+       try{await push(text,replyTarget(v,binding));progress.status='sent';progress.sent_at=now();}catch(error){progress.status='delivery_unknown';onError(error,'progress_delivery');}
        write(p,v);return progress.status==='sent';
       }});
       v.reply=result.text||'任务已处理，请查看送审内容或发送“任务列表”。';
@@ -83,7 +96,7 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
       }
      }
      v.status='replying';v.finished_at=now();write(p,v);
-     if(!v.skip_final_reply&&!v.interrupt_requested_by)await push(v.reply);v.status='completed';v.reply_ack_at=now();write(p,v);
+     if(!v.skip_final_reply&&!v.interrupt_requested_by)await push(v.reply,replyTarget(v,binding));v.status='completed';v.reply_ack_at=now();write(p,v);
     }catch(error){
      if(v.interrupt_requested_by&&(/interrupt/i.test(error.message)||error.code==='CODEX_TURN_INTERRUPTED')){
       v.status='interrupted';v.interrupted_at=now();write(p,v);
@@ -101,14 +114,14 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
  async function processOutbox(){
   if(sending||!client.isConnected)return;sending=true;
   try{for(const name of fs.readdirSync(outbox).filter(n=>n.endsWith('.json')).sort()){
-   const p=path.join(outbox,name),v=read(p);if(!eligible(v,binding))continue;
+   const p=path.join(outbox,name),v=read(p);if(!eligible(v,binding,sourceOf(v),knownMembers))continue;
    let files;try{files=validateFiles(v,studio);}catch(error){v.status='failed';v.error=error.message;write(p,v);continue;}
    const cancelled=()=>{if(!v.source_message_id)return false;const source=path.join(inbox,digest(v.source_message_id)+'.json');return fs.existsSync(source)&&!!read(source).interrupt_requested_by;};
    if(cancelled()){v.status='cancelled';write(p,v);continue;}
    v.status='sending';v.steps=v.steps||[];write(p,v);
    try{
     if(!v.steps.some(s=>s.step==='text'&&s.errcode===0)){
-     await push(v.text);v.steps.push({step:'text',errcode:0,at:now()});write(p,v);
+     await push(v.text,v.destination.chatid);v.steps.push({step:'text',errcode:0,at:now()});write(p,v);
     }
     for(let i=0;i<files.length;i++){
      if(v.steps.some(s=>s.step==='file:'+i&&s.errcode===0))continue;
@@ -121,7 +134,7 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
      v.steps.push({step:'upload:'+i,media_id:upload.media_id,media_type:'file',at:now()});write(p,v);
      if(cancelled()){const e=new Error('Delivery cancelled by user interruption');e.code='DELIVERY_CANCELLED';throw e;}
      v.stage='sending_file';write(p,v);
-     ack(await client.sendMediaMessage(binding.chatid,'file',upload.media_id));
+     ack(await client.sendMediaMessage(v.destination.chatid,'file',upload.media_id));
      v.steps.push({step:'file:'+i,media_type:'file',filename:media.filename,errcode:0,at:now()});write(p,v);
     }
     v.status='sent';v.stage='completed';v.sent_at=now();v.recipient_confirmation='pending';write(p,v);
@@ -130,30 +143,31 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
  }
  const timer=setInterval(()=>{void processInbox();void processOutbox().catch(e=>onError(e,'outbox'));},3000);
  return {stop:()=>clearInterval(timer),isBusy:()=>handling||sending,handle:async frame=>{
-  const body=frame.body||{};if(!authorized(body,binding,botId))return false;
+  const body=frame.body||{};if(!authorized(body,binding,botId,knownMembers))return false;
+  if(body.chattype==='group')knownMembers.add(body.from.userid);
   const text=taskText(body.text?.content);if(!text)return true;
   const p=path.join(inbox,digest(body.msgid)+'.json');if(fs.existsSync(p))return true;
-  write(p,{msgid:body.msgid,user_id:body.from.userid,chatid:body.chatid,text,received_at:now(),status:'queued'});
+  write(p,{msgid:body.msgid,user_id:body.from.userid,chatid:body.chatid,chattype:body.chattype,text,received_at:now(),status:'queued'});
   // Only acknowledge a new real user task, never on startup or configuration changes.
   try{ack(await client.replyStream(frame,'task_'+crypto.randomUUID(),'收到，处理中',true));}catch(e){onError(e,'task_ack');}
   if(/^(?:进度\s+C\d{4,}|任务列表)\s*$/.test(text)){
    const record=read(p);record.status='direct_command';write(p,record);
    try{
     await handleContentMessage({reply:async(_sender,reply)=>{
-     if(status.active_message){const active=read(path.join(inbox,digest(status.active_message)+'.json'));const latest=active.progress?.at(-1);reply+='\n\n当前正在处理：'+active.text+(latest?'\n最近进度：'+latest.text:'');}
-     await push(reply);
+     if(status.active_message){const active=read(path.join(inbox,digest(status.active_message)+'.json'));if(replyTarget(active,binding)===replyTarget(record,binding)){const latest=active.progress?.at(-1);reply+='\n\n当前正在处理：'+active.text+(latest?'\n最近进度：'+latest.text:'');}}
+     await push(reply,replyTarget(record,binding));
     }},{text,id:'wecom:'+body.msgid,senderId:body.from.userid});
     record.status='completed';record.reply_ack_at=now();write(p,record);
    }catch(error){record.status='outcome_unknown';record.error=errorDetails(error);write(p,record);onError(error,'status_reply');}
    return true;
   }
-  const record=read(p),targetRecord=activeRecord;
+  const record=read(p),targetRecord=activeRecord&&replyTarget(activeRecord.v,binding)===replyTarget(record,binding)?activeRecord:undefined;
   try{
    const handled=await applyIncomingControl({record,target:targetRecord?.v,
     control:options=>{if(!controlTask)throw Error('Native task control is unavailable');return controlTask({...options,targetMessageId:targetRecord?.v.msgid});},
-    persist:()=>write(p,record),persistTarget:()=>{if(targetRecord)write(targetRecord.p,targetRecord.v);},push});
+    persist:()=>write(p,record),persistTarget:()=>{if(targetRecord)write(targetRecord.p,targetRecord.v);},push:text=>push(text,replyTarget(record,binding))});
    if(handled)return true;
-  }catch(error){onError(error,'task_control');await push('当前控制请求的结果不明，已保留记录，不会自动重复执行。');return true;}
+  }catch(error){onError(error,'task_control');await push('当前控制请求的结果不明，已保留记录，不会自动重复执行。',replyTarget(record,binding));return true;}
   void processInbox();return true;
  }};
 }

@@ -21,7 +21,7 @@ export async function handleContentMessage(service,message){
   let reply;
   if(!result.ok)reply='内容工作室：'+result.error;
   else if(request.action==='approve')reply=`已记录 ${request.id}-v${request.version} 审核通过。未发布。`;
-  else if(request.action==='link')reply=`已登记 ${request.id}-v${request.version} 的用户提供官方预览链接，群内发送状态：${result.result.delivery||result.result.status}。`;
+  else if(request.action==='link')reply=`已登记 ${request.id}-v${request.version} 的用户提供官方预览链接，来源会话发送状态：${result.result.delivery||result.result.status}。`;
   else reply=result.result.length?result.result.map(j=>`${j.id}-v${j.version}｜${j.topic}\n制作：${j.status}\n送审：${j.deliveries.map(d=>`v${d.version} ${d.status}`).join('；')||'未入队'}`).join('\n\n'):'目前没有内容制作任务。';
   await service.reply(message.senderId,reply);return true;
 }

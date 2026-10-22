@@ -49,7 +49,7 @@ test('startup stays silent; one new callback executes once and replies to same g
   await worker.handle(frame);await worker.handle(frame);
   for(let n=0;n<30&&!sends.includes('mock completed');n++)await new Promise(r=>setTimeout(r,10));
   assert.equal(continuations,1);assert.deepEqual(sends,['ack','mock completed']);
- }finally{worker.stop();fs.rmSync(temp,{recursive:true,force:true});}
+ }finally{worker.stop();while(worker.isBusy())await new Promise(r=>setTimeout(r,10));fs.rmSync(temp,{recursive:true,force:true});}
 });
 test('failed upload can resume video without repeating acknowledged article',async()=>{
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'wecom-upload-')),root=path.join(temp,'bot'),studio=path.join(temp,'wechat-content-studio');
@@ -68,5 +68,5 @@ test('failed upload can resume video without repeating acknowledged article',asy
   await until('upload_failed');assert.equal(readQ().error.code,40011);assert.equal(videoSends,0);
   fail=false;write(q,{...readQ(),status:'queued'});await until('sent');
   assert.equal(textSends,0);assert.equal(videoSends,1);
- }finally{worker.stop();fs.rmSync(temp,{recursive:true,force:true});}
+ }finally{worker.stop();while(worker.isBusy())await new Promise(r=>setTimeout(r,10));fs.rmSync(temp,{recursive:true,force:true});}
 });

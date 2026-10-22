@@ -44,7 +44,7 @@ client.on('message.text',frame=>{void (async()=>{
  if(!bind){await worker.handle(frame);return;}
  const b=frame.body||{};
  if(b.chattype!=='group'||!b.chatid||!b.from?.userid||(b.aibotid&&b.aibotid!==botId)||taskText(b.text?.content)!=='绑定审核群 '+phrase)return;
- const binding={enabled:true,chatid:b.chatid,group_members:'all',bot_id_sha256:crypto.createHash('sha256').update(botId).digest('hex'),activated_at:new Date().toISOString(),historical_backlog_enabled:false};
+ const binding={enabled:true,chatid:b.chatid,group_members:'all',private_messages:'known_members',private_user_ids:[b.from.userid],bot_id_sha256:crypto.createHash('sha256').update(botId).digest('hex'),activated_at:new Date().toISOString(),historical_backlog_enabled:false};
  write(path.join(stateDir,'binding.json'),binding);
  const configPath=path.join(studio,'config.json'),config=JSON.parse(fs.readFileSync(configPath,'utf8'));
  config.review_destination={provider:'wecom',chatid:b.chatid,display_name:'企业微信审核群'};write(configPath,config);
