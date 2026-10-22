@@ -144,7 +144,7 @@ def deliver(job_id, version=None):
     files = []
     if 'review.mp4' in manifest['outputs']:
         files.append({'path': str(folder / 'review.mp4'), 'sha256': manifest['outputs']['review.mp4']})
-        parts.append('视频审片：MP4文件随本任务送审。')
+        parts.append('视频审片：MP4 文件附件随本任务送审，可下载保存。')
     official = folder / 'official-preview.json'
     if job['kind'] != 'video' and official.exists():
         parts.append('公众号草稿预览：' + official_url(read(official)['url']))
@@ -155,16 +155,18 @@ def deliver(job_id, version=None):
     text = f'{job_id}-v{number}｜{job["topic"]}\n' + '\n'.join(parts)
     destination = CONFIG.get('review_destination', {'provider': 'desktop_wechat', 'group': CONFIG['group']})
     text += f'\n审核意见请 @ 机器人：修改 {job_id} …；通过 {job_id}-v{number}。'
-    signature = hashlib.sha256(json.dumps({'text': text, 'files': files, 'destination': destination}, sort_keys=True).encode()).hexdigest()[:16]
+    media_type = 'file' if destination.get('provider') == 'wecom' else 'video'
+    signature = hashlib.sha256(json.dumps({'text': text, 'files': files, 'destination': destination, 'media_type': media_type}, sort_keys=True).encode()).hexdigest()[:16]
     path = ROOT / 'outbox' / f'{job_id}-v{number}-{signature}.json'
     if not path.exists():
         # A later real article link should not cause a previously queued/sent video to be repeated.
         prior_files = {f['sha256'] for p in (ROOT / 'outbox').glob(f'{job_id}-v{number}-*.json')
                        for prior in [read(p)] if prior.get('destination', {'provider': 'desktop_wechat', 'group': prior.get('group')}) == destination
+                       and prior.get('media_type', 'video') == media_type
                        and prior.get('status') not in ('failed', 'cancelled') for f in prior.get('files', [])}
         files = [f for f in files if f['sha256'] not in prior_files]
         write(path, {'job_id': job_id, 'version': number, 'group': CONFIG['group'], 'text': text,
-                     'destination': destination, 'source_message_id': read(ROOT/'state/active-wecom-task.json').get('msgid') if (ROOT/'state/active-wecom-task.json').exists() else None, 'files': files, 'status': 'queued', 'created_at': now(), 'steps': []})
+                     'destination': destination, 'media_type': media_type, 'source_message_id': read(ROOT/'state/active-wecom-task.json').get('msgid') if (ROOT/'state/active-wecom-task.json').exists() else None, 'files': files, 'status': 'queued', 'created_at': now(), 'steps': []})
     if job['kind'] == 'video' or official.exists(): set_status(job, 'awaiting_review')
     return {'job_id': job_id, 'version': number, 'status': job['status'], 'outbox': str(path), 'delivery': read(path)['status']}
 

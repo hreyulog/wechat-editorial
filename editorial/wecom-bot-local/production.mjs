@@ -114,15 +114,15 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
      if(v.steps.some(s=>s.step==='file:'+i&&s.errcode===0))continue;
      v.stage='preparing_media';write(p,v);
      const media=await reviewMedia(files[i],process.env.FFMPEG_BINARY||read(path.join(studio,'config.json')).ffmpeg);
-     v.delivery_media={path:media.path,sha256:digest(media.bytes),bytes:media.bytes.length};write(p,v);
+     v.delivery_media={path:media.path,sha256:digest(media.bytes),bytes:media.bytes.length,media_type:'file',filename:media.filename};write(p,v);
      v.stage='uploading';v.active_file=i;write(p,v);
-     const upload=await client.uploadMedia(media.bytes,{type:'video',filename:media.filename});
-     if(!upload.media_id)throw Error('Video upload returned no media ID');
-     v.steps.push({step:'upload:'+i,media_id:upload.media_id,at:now()});write(p,v);
+     const upload=await client.uploadMedia(media.bytes,{type:'file',filename:media.filename});
+     if(!upload.media_id)throw Error('File upload returned no media ID');
+     v.steps.push({step:'upload:'+i,media_id:upload.media_id,media_type:'file',at:now()});write(p,v);
      if(cancelled()){const e=new Error('Delivery cancelled by user interruption');e.code='DELIVERY_CANCELLED';throw e;}
-     v.stage='sending_video';write(p,v);
-     ack(await client.sendMediaMessage(binding.chatid,'video',upload.media_id,{title:v.job_id+'-v'+v.version+' 审片',description:'请在本群 @ 机器人提出修改意见。'}));
-     v.steps.push({step:'file:'+i,errcode:0,at:now()});write(p,v);
+     v.stage='sending_file';write(p,v);
+     ack(await client.sendMediaMessage(binding.chatid,'file',upload.media_id));
+     v.steps.push({step:'file:'+i,media_type:'file',filename:media.filename,errcode:0,at:now()});write(p,v);
     }
     v.status='sent';v.stage='completed';v.sent_at=now();v.recipient_confirmation='pending';write(p,v);
    }catch(error){v.status=error.code==='DELIVERY_CANCELLED'?'cancelled':['uploading','preparing_media'].includes(v.stage)?'upload_failed':'delivery_unknown';v.error=errorDetails(error);v.failed_at=now();write(p,v);onError(error,'production_delivery');}
