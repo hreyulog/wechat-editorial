@@ -7,7 +7,7 @@
   "scripts": {
     "bot": "node editorial/wecom-bot-local/bridge.mjs",
     "bind": "node editorial/wecom-bot-local/bridge.mjs --bind",
-    "test:bridge": "node --test editorial/wecom-bot-local/test-production.mjs editorial/wecom-bot-local/test-interrupt.mjs"
+    "test:bridge": "node --test editorial/wecom-bot-local/test-production.mjs editorial/wecom-bot-local/test-conversation-routing.mjs editorial/wecom-bot-local/test-interrupt.mjs editorial/wecom-bot-local/test-phone-preview.mjs editorial/wecom-bot-local/test-turbopush-mcp.mjs"
   },
   "dependencies": {
     "@wecom/aibot-node-sdk": "1.0.7",

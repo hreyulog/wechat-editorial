@@ -63,7 +63,7 @@ flowchart LR
 
 只允许 token、draft/count/get/add、封面永久素材和正文图片等明确端点。SSL 校验开启，不跟随第三方跳转，不调用 freepublish/submit。草稿创建前记录 creating；网络断开保留 outcome_unknown，防止重复草稿。真正的 draft/get URL 才能作为官方预览；media_id、后台编辑地址或本地网页都不能替代。
 
-未设置或错误凭证只影响需要该接口的任务，不在终端、群或 Git 中输出密钥。群审核只改变 review 状态，没有自动发布接口。
+未设置或错误凭证只影响需要该接口的任务，不在终端、群或 Git 中输出密钥。文章审核只改变 review 状态，不公开发布。视频按 [手机预览后发布](PHONE-PREVIEW-REVIEW.md) 先发真实后台手机预览，真实消息确认绑定版本后再交给发布执行器；没有预览时停止待审，预览自动获取入口尚未接通。
 
 ## Windows 实测与 Linux 移植
 

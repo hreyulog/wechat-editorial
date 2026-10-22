@@ -23,7 +23,7 @@
 - 发布及浏览器控制：`publish_video`、`publish_article`、`publish_graph_text`、`close_browser`。
 - 平台设置与删除：`create_platform_setting`、`update_platform_setting`、`delete_platform_setting`、`delete_article`。
 
-工具可见不代表每次调用都已获授权。删除内容或平台设置需要用户当次明确点名；审核通过只记录审核，公开发布需对应明确指令。实际执行仍遵守工具及站点策略，遇到拒绝时保留原始错误，不通过其他路径绕过。MCP 连接成功、本地内容保存、远端上传和公开发布分别记录，不能互相代替。
+工具可见不代表每次调用都已获授权。删除内容或平台设置需要用户当次明确点名；文章审核只记录审核，视频按 [手机预览后发布](PHONE-PREVIEW-REVIEW.md) 先发送真实预览、确认绑定版本后才进入发布处理。实际执行仍遵守工具及站点策略，遇到拒绝时保留原始错误，不通过其他路径绕过。MCP 连接成功、本地内容保存、远端上传和公开发布分别记录，不能互相代替。
 
 用户可以发“查询 TurboPush 已登录账号”或“查看 TurboPush 里 C编号-v版本 的本地内容”。已有版本的 `turbopush-local.json` 提供本地内容 ID，避免重复创建。
 
