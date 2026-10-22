@@ -72,4 +72,10 @@ if(!runner.includes('editorial loaded-thread reset')){
  runner=replace(runner,'        this.child = child;\n        this.stderr = "";','        this.child = child;\n        this.runtimeInfoByThread.clear(); // editorial loaded-thread reset\n        this.stderr = "";');
  fs.writeFileSync(runnerPath,runner);
 }
+manager=fs.readFileSync(managerPath,'utf8');
+if(!manager.includes('editorial control startup')){
+ manager=replace(manager,'if (!session.threadId || !this.isSessionResponding(accountId, sessionId)) return { accepted: false, reason: "not_running" };','if (!this.isSessionResponding(accountId, sessionId)) return { accepted: false, reason: "not_running" };\n        if (!session.threadId) return { accepted: false, reason: "starting" }; // editorial control startup');
+ manager=replace(manager,'        return result;\n    }\n    async continueSession','        const reply = await result;\n        if (!reply.accepted) { this.controlRequests.delete(messageId); if (reply.reason === "not_running" && this.isSessionResponding(accountId, sessionId)) return { accepted: false, reason: "starting" }; }\n        return reply;\n    }\n    async continueSession');
+ fs.writeFileSync(managerPath,manager);
+}
 console.log(JSON.stringify({control_adapter_installed:true,files_updated:edits.length}));

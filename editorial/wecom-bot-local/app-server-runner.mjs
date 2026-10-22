@@ -7,7 +7,7 @@ import {write} from './production.mjs';
 // One native Codex app-server owns the thread; new input can steer the active turn.
 export function createCodexRunner({studio,stateDir,repository}){
  const stateFile=path.join(stateDir,'codex-thread.json');
- let child,ready,nextId=1,active,threadId=fs.existsSync(stateFile)?JSON.parse(fs.readFileSync(stateFile,'utf8')).threadId:undefined;
+ let child,ready,nextId=1,active,preparing,threadId=fs.existsSync(stateFile)?JSON.parse(fs.readFileSync(stateFile,'utf8')).threadId:undefined;
  const pending=new Map(),loaded=new Set();
  const send=value=>{if(!child||child.exitCode!==null||child.stdin.destroyed)throw Error('Codex app-server is disconnected');child.stdin.write(JSON.stringify(value)+'\n');};
  const request=(method,params)=>new Promise((resolve,reject)=>{
@@ -61,21 +61,27 @@ export function createCodexRunner({studio,stateDir,repository}){
   })();return ready;
  };
  const run=async(prompt,{onProgress,messageId}={})=>{
-  await connect();if(active)throw Error('A Codex turn is already active');
+  if(active||preparing)throw Error('A Codex turn is already active');preparing={messageId};
+  try{
+  await connect();
   if(!threadId||!loaded.has(threadId)){
    const result=await request(threadId?'thread/resume':'thread/start',{...(threadId?{threadId}:{}),cwd:studio,approvalPolicy:'never',sandbox:'workspace-write',...(process.env.CODEX_MODEL?{model:process.env.CODEX_MODEL}:{})});
    threadId=result.thread?.id||threadId;if(!threadId)throw Error('Codex returned no thread ID');loaded.add(threadId);write(stateFile,{threadId,updated_at:new Date().toISOString()});
   }
-  return new Promise((resolve,reject)=>{
+  const completion=new Promise((resolve,reject)=>{
    const target={threadId,messageId,text:'',onProgress,chain:Promise.resolve(),resolve,reject,started:false};active=target;
    target.timer=setTimeout(()=>reject(Error('Codex task deadline exceeded; outcome is unknown')),Number(process.env.CODEX_TIMEOUT_SECONDS||14400)*1000);
    request('turn/start',{threadId,cwd:studio,approvalPolicy:'never',input:[{type:'text',text:prompt,text_elements:[]}]}).then(result=>{
     target.turnId=result.turn?.id||target.turnId;if(!target.turnId)throw Error('Codex returned no turn ID');target.started=true;return finish(target);
    }).catch(error=>{if(active===target)active=undefined;clearTimeout(target.timer);reject(error);});
   });
+  preparing=undefined;return completion;
+  }catch(error){preparing=undefined;throw error;}
  };
  run.control=async({action,text,messageId,targetMessageId})=>{
-  const target=active;if(!target?.turnId||(targetMessageId&&target.messageId!==targetMessageId))return {accepted:false,reason:'not_running'};
+  const target=active||preparing;
+  if(!target||(targetMessageId&&target.messageId!==targetMessageId))return {accepted:false,reason:'not_running'};
+  if(!target.turnId)return {accepted:false,reason:'starting'};
   if(action==='interrupt')await request('turn/interrupt',{threadId:target.threadId,turnId:target.turnId});
   else await request('turn/steer',{threadId:target.threadId,expectedTurnId:target.turnId,clientUserMessageId:messageId,input:[{type:'text',text,text_elements:[]}]});
   return {accepted:true,action,threadId:target.threadId,turnId:target.turnId};

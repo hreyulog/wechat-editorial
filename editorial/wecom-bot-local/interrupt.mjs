@@ -18,7 +18,11 @@ export async function applyIncomingControl({record,target,control,persist,persis
  record.status='control_pending';record.target_msgid=target.msgid;persist();
  if(intent.action==='interrupt'){target.interrupt_requested_by=record.msgid;persistTarget();}
  try{
-  const result=await control({action:intent.action,text:'来自群成员 '+record.user_id+' 的即时补充，消息凭据 wecom:'+record.msgid+'：\n'+intent.text,messageId:'wecom:'+record.msgid});
+  const command={action:intent.action,text:'来自群成员 '+record.user_id+' 的即时补充，消息凭据 wecom:'+record.msgid+'：\n'+intent.text,messageId:'wecom:'+record.msgid};
+  let result=await control(command);
+  for(let attempt=0;result.reason==='starting'&&attempt<50;attempt++){
+   await new Promise(resolve=>setTimeout(resolve,200));result=await control(command);
+  }
   record.control=result;
   if(!result.accepted){
    if(intent.action==='interrupt'){target.interrupt_requested_by=previousIntent;persistTarget();}
