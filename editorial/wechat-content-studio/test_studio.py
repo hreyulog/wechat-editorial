@@ -129,6 +129,19 @@ class StudioTests(unittest.TestCase):
         for url in ('http://mp.weixin.qq.com/s?x=1','http://localhost/a','https://mp.weixin.qq.com/cgi-bin/home','https://mp.weixin.qq.com.evil.test/s?x=1'):
             with self.assertRaises(ValueError): studio.official_url(url)
 
+    def test_article_with_filtered_video_cannot_be_sent_or_approved_as_complete(self):
+        job,folder,_=self.fixture('article')
+        studio.write(folder/'article.json',{'video_embed':{'source':'src/video.json'}})
+        studio.write(folder/'src/video.json',{'vid':'apiv_fixture'})
+        (folder/'official').mkdir()
+        studio.write(folder/'official-preview.json',{'url':'https://mp.weixin.qq.com/s/fixture'})
+        studio.write(folder/'official/receipt.json',{'manifest_sha256':studio.sha(folder/'manifest.json')})
+        studio.write(folder/'official/readback.json',{'news_item':[{'content':'<p>video caption only</p>'}]})
+        result=studio.deliver(job['id'])
+        self.assertFalse(result['queued']); self.assertEqual(result['status'],'awaiting_video_embed')
+        self.assertEqual(list((studio.ROOT/'outbox').glob('*')),[])
+        with self.assertRaisesRegex(ValueError,'视频尚未插入'):studio.review(job['id'],1,'fixture-review')
+
     def test_idempotent_delivery_and_changed_artifacts_rejected(self):
         job,_,artifact=self.fixture()
         first=studio.deliver(job['id']); second=studio.deliver(job['id'])

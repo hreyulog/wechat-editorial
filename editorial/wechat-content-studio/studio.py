@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
+from video_embed_check import require_deliverable_video
 
 ROOT = Path(__file__).resolve().parent
 from settings import load_config
@@ -220,6 +221,11 @@ def deliver(job_id, version=None):
                       '视频审片：MP4 文件附件随本任务发送；看完确认后才上传视频号草稿箱。'])
         files.append({'path': str(folder / 'review.mp4'), 'sha256': manifest['outputs']['review.mp4']})
     official = folder / 'official-preview.json'
+    if job['kind'] != 'video' and official.exists() and (folder/'article.json').is_file():
+        try: require_deliverable_video(folder, read(folder/'article.json'), sha(folder/'manifest.json'))
+        except (ValueError, FileNotFoundError) as error:
+            set_status(job, 'awaiting_video_embed')
+            return {'job_id':job_id, 'version':number, 'status':job['status'], 'queued':False, 'blocker':str(error)}
     if job['kind'] != 'video' and official.exists():
         parts.append('公众号草稿预览：' + official_url(read(official)['url']))
     elif job['kind'] != 'video':
@@ -268,6 +274,8 @@ def review(job_id, version, source_message_id):
     if not source_message_id: raise ValueError('User message receipt required')
     if job['kind'] != 'video' and not (folder / 'official-preview.json').exists():
         raise ValueError('Article has no official preview; it cannot be marked fully approved')
+    if job['kind'] != 'video' and (folder/'article.json').is_file():
+        require_deliverable_video(folder, read(folder/'article.json'), sha(folder/'manifest.json'))
     write(folder / 'review.json', {'status': 'approved', 'source_message_id': source_message_id,
                                  'at': now(), 'manifest_sha256': sha(folder / 'manifest.json'), 'published': False})
     if int(version) == job['version']: set_status(job, 'approved')

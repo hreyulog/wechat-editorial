@@ -65,7 +65,7 @@ flowchart LR
 
 ## 公众号接口
 
-只允许 token、draft/count/get/add、封面永久素材和正文图片等明确端点。SSL 校验开启，不跟随第三方跳转，不调用 freepublish/submit。草稿创建前记录 creating；网络断开保留 outcome_unknown，防止重复草稿。真正的 draft/get URL 才能作为官方预览；media_id、后台编辑地址或本地网页都不能替代。
+只允许 token、draft/count/get/add/update、封面永久素材和正文图片等明确端点。SSL 校验开启，不跟随第三方跳转，不调用 freepublish/submit。草稿创建前记录 creating；网络断开保留 outcome_unknown，防止重复草稿。真正的 draft/get URL 才能作为官方预览；media_id、后台编辑地址或本地网页都不能替代。含视频文章还要通过[实际组件读回检查](ARTICLE-VIDEO.md)，组件被过滤时保留未完成状态。
 
 未设置或错误凭证只影响需要该接口的任务，不在终端、群或 Git 中输出密钥。文章审核只改变 review 状态，不公开发布。视频按 [视频审核后上传草稿](VIDEO-REVIEW.md) 先发 MP4 和实际文案，真实消息确认绑定版本后再交给执行器以 syncDraft:true 上传草稿；返回视频名、完整简介、目标账号、版本、文件名、草稿上传实际状态和记录号。OK 不授权公开发布，不再要求手机预览。
 

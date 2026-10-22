@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 from official_api import OfficialClient, ApiError
+from video_embed_check import verify_video_component
 from studio import CONFIG, ROOT, checked_manifest, get_job, now, official_url, read, sha, write
 
 
@@ -102,15 +103,24 @@ def submit(job_id, version=None):
     if len(items) != 1 or items[0].get('title') != read(output/'payload.json')['title']:
         raise ValueError('Official readback does not match the submitted article')
     write(output/'readback.json',detail)
+    source_article = read(folder/'article.json') if (folder/'article.json').is_file() else {}
+    video_check = verify_video_component(folder, source_article, items[0].get('content', ''))
+    if video_check['required']:
+        receipt['video_player_preserved'] = video_check['preserved']
+        receipt['video_component_check'] = video_check
+        write(output/'video-readback.json', video_check)
+    ready = video_check['preserved']
     raw_url = items[0].get('url','')
     parsed = urlparse(raw_url)
     if parsed.scheme == 'http' and parsed.hostname == 'mp.weixin.qq.com': raw_url = urlunparse(parsed._replace(scheme='https'))
     url = official_url(raw_url)
-    receipt.update(state='preview_available',preview_url=url,readback_at=now()); write(receipt_path,receipt)
+    receipt.update(state='preview_available' if ready else 'video_embedding_incomplete',preview_url=url,readback_at=now()); write(receipt_path,receipt)
     preview = {'url':url,'provenance':'official_api_draft_get','media_id':receipt['media_id'],
                'attached_at':now(),'manifest_sha256':binding['manifest_sha256'],'readback_sha256':sha(output/'readback.json')}
     write(folder/'official-preview.json',preview)
-    return {'job_id':job_id,'version':binding['version'],'state':receipt['state'],'url':url,'published':False}
+    return {'job_id':job_id,'version':binding['version'],'state':receipt['state'],'url':url,'published':False,
+            'ready_for_review':ready,
+            **({'video_player_preserved':ready,'phone_playback_tested':False} if video_check['required'] else {})}
 
 
 if __name__ == '__main__':

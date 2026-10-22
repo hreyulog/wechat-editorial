@@ -54,5 +54,18 @@ class DraftTests(unittest.TestCase):
         with self.assertRaises(ValueError):client.request('/freepublish/submit',{'media_id':'fixture'})
         with self.assertRaises(ValueError):turbopush_local.request_local('/sse/video/1',{})
 
+    def test_successful_draft_without_requested_video_is_not_ready_for_review(self):
+        studio.write(self.folder/'article.json',{'video_embed':{'source':'src/video.json'}})
+        (self.folder/'src').mkdir(exist_ok=True)
+        studio.write(self.folder/'src/video.json',{'vid':'apiv_fixture'})
+        studio.write(self.output/'receipt.json',{'media_id':'fixture-media','thumb_media_id':'fixture-cover'})
+        with patch.object(drafts,'OfficialClient') as cls,patch.object(drafts,'publish_helpers'):
+            cls.return_value.request.return_value={'news_item':[{'title':'fixture','content':'<p>caption only</p>','url':'https://mp.weixin.qq.com/s/fixture'}]}
+            result=drafts.submit(self.job['id'])
+        self.assertFalse(result['ready_for_review'])
+        self.assertFalse(result['video_player_preserved'])
+        self.assertEqual(result['state'],'video_embedding_incomplete')
+        self.assertFalse(result['published'])
+
 
 if __name__=='__main__':unittest.main()

@@ -13,7 +13,7 @@ import yaml
 from studio import CONFIG, ROOT, now, write
 
 API_BASE = 'https://api.weixin.qq.com/cgi-bin'
-ALLOWED_PATHS = {'/token', '/draft/count', '/draft/get', '/draft/add',
+ALLOWED_PATHS = {'/token', '/draft/count', '/draft/get', '/draft/add', '/draft/update',
                  '/material/add_material', '/media/uploadimg'}
 
 
