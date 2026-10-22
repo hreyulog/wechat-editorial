@@ -119,4 +119,4 @@ journalctl --user -u wechat-editorial -f
 
 ## 能力边界
 
-Linux 路径只覆盖官方企业微信 Bot、Codex CLI、文章/视频制作、公众号官方草稿和同群送审。它不操作桌面 WeChat，不接管视频号后台。TurboPush 是可选本地内容库适配器，默认关闭；视频号实际上传或发布仍需另行集成，不会凭本地内容库 ID 宣称视频号草稿已建。
+Linux 路径覆盖官方企业微信 Bot、Codex CLI、文章/视频制作、公众号官方草稿和原会话送审。它不操作桌面 WeChat，不接管视频号后台。TurboPush 可选本地内容库适配器和 [MCP 连接](TURBOPUSH-MCP.md)，默认关闭；MCP 允许查询及本地内容管理，不开放浏览器发布。视频号实际上传或发布仍需独立获准的通道，不会凭本地内容库 ID 宣称视频号草稿已建。

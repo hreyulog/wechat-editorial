@@ -29,3 +29,5 @@ description: 接收企业微信群 @ 任务及已确认成员的私聊任务，�
 执行或业务消息发送超时可能已有副作用，记录 outcome_unknown / delivery_unknown，由操作员核对，不盲目重做。服务器 ACK 不等于用户已播放。Linux 移植与 Windows 实测证据分开；本次迁移未运行 Linux 验收。
 
 完整能力与边界见 [架构和运维](../docs/WORKFLOW.md)。归档只含受版本控制的代码、Skill、配置模板与依赖锁，排除凭证、登录状态、聊天、旧任务、视频、node_modules、虚拟环境和缓存。第三方来源和授权见 [NOTICE](../NOTICE.md)。
+
+需要查询或管理 TurboPush 本地内容时，按 [MCP 接入说明](../docs/TURBOPUSH-MCP.md)显式配置机器人执行器。当前连接只开放查询及本地管理工具，发布工具未开放；不要混淆 MCP 已连接、本地入库、远端草稿和公开发布。

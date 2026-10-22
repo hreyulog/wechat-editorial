@@ -3,6 +3,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import {spawn} from 'node:child_process';
 import {write} from './production.mjs';
+import {turbopushCodexArgs} from './turbopush-mcp.mjs';
 
 // One native Codex app-server owns the thread; new input can steer the active turn.
 export function createCodexRunner({studio,stateDir,repository}){
@@ -51,7 +52,7 @@ export function createCodexRunner({studio,stateDir,repository}){
  const connect=()=>{
   if(ready)return ready;
   ready=(async()=>{
-   child=spawn(process.env.CODEX_BIN||'codex',['-c','approval_policy="never"','-c','sandbox_workspace_write.network_access=true','-c','sandbox_workspace_write.writable_roots='+JSON.stringify([repository]),'app-server','--stdio'],{cwd:studio,windowsHide:true,stdio:['pipe','pipe','pipe'],env:process.env});
+   child=spawn(process.env.CODEX_BIN||'codex',['-c','approval_policy="never"','-c','sandbox_workspace_write.network_access=true','-c','sandbox_workspace_write.writable_roots='+JSON.stringify([repository]),...turbopushCodexArgs(path.join(studio,'state/turbopush-mcp.json')),'app-server','--stdio'],{cwd:studio,windowsHide:true,stdio:['pipe','pipe','pipe'],env:process.env});
    const processRef=child;readline.createInterface({input:child.stdout}).on('line',line=>{try{incoming(JSON.parse(line));}catch(e){fail(e);}});
    child.stderr.on('data',()=>{});child.stdin.on('error',()=>{});
    child.on('error',()=>fail(Error('Unable to start Codex app-server; check CODEX_BIN and login')));

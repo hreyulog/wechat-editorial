@@ -36,4 +36,6 @@
 
 用户已授权把选定视频自动上传到指定视频号草稿箱，无需逐次确认保存草稿，也不规定必须由用户手动点击 TurboPush。现有 TurboPush 适配器仅保存本地内容库，默认关闭，尚未实现视频号远端上传；登录状态、本地内容 ID 和 syncDraft:true 都不是视频号草稿回执。
 
+可选 TurboPush MCP 配置在 state/turbopush-mcp.json，由执行器显式加载为 turbo_push；配置方法见 ../../docs/TURBOPUSH-MCP.md。启用后可使用账号、内容、记录查询与本地内容创建更新共 13 个工具。查询优先使用 MCP，已有 turbopush-local.json 时用其 id 查询，避免重复创建。当前配置不暴露发布及浏览器控制工具。MCP 是否接入与远端上传是否可用必须分别说明，不能把本地脚本的能力局限说成 TurboPush MCP 的能力局限。
+
 工作机直接访问视频号后台曾被浏览器工具以 Site-safety policy blocks this action 拒绝。不得通过 TurboPush 或其他工具间接绕过该限制。受阻时说明具体工具限制和“尚未上传”，不要只用“按工作区规则需手动同步”搪塞，也不要误称缺少用户授权。Linux 包不承诺桌面 TurboPush 可用；独立获准且不绕过限制的上传通道需另行集成后才能使用。自动保存草稿与公开发布分开，公开发布需对应明确指令。
