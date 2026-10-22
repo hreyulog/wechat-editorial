@@ -35,6 +35,10 @@ flowchart LR
 
 入站 `state/inbox/<msgid哈希>.json` 保存真实消息、发起人、排队和执行结果。任务按接收时间串行进入 Codex。会话 ID 保存在 `state/codex-thread.json`，后续任务续用；没有已有任务时不创建、发送稿件。重启遇到执行中的任务置 outcome_unknown，先核对本地 Codex 会话和实际产物，不自动重做。
 
+单次制作任务最长 4 小时。可选 codex-weixin 适配器通过 `scripts/patch-codex-weixin-recovery.mjs` 安装相同的长任务时限；RPC 等待与整轮制作时限分开。任务异常保留 outcome_unknown，并向原会话回告停止原因，失败回告不自动重发。
+
+桌面与机器人同时持有同一原生会话时可能返回 active writer。维护时先确认双方空闲，通过受本机令牌保护的 recover 入口从旧记录 fork，保留历史并切换机器人执行会话；不关闭桌面进程、删除锁或覆盖历史。该入口只 fork 历史，不自动运行内容任务。核对既有草稿、素材和发送回执后，可用 `scripts/recover-wecom-task.mjs --root <bot目录> --message <原msgid> --note-file <核对说明文件>` 恢复一条指定的 outcome_unknown 任务；原文、发起人、目的地和之前的错误均保留，不批量重放历史队列。官方草稿已存在时先查询，不重复创建。
+
 绑定时记录发起者的私聊资格，绑定群中成功发过任务的成员也可私聊。消息记录 chattype 和真实 user_id，进度、控制回执、最终答复及附件都回原会话。私聊附件必须有匹配的真实入站凭据，不能把私聊内容发到默认群。不同来源会话的任务串行排队，彼此不自动 steer 或打断；同一来源会话继续支持即时补充和停止。
 
 制作中逐段转发用户可见的 assistant commentary，不转发推理或工具日志。需要用户选择时先问并结束本轮等待下一条回复；不会把整个任务先做完才提问题。原生 app-server 只转发 commentary，最终答复在 turn/completed 后发送。

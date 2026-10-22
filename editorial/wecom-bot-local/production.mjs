@@ -93,7 +93,7 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
        {text:v.text,id:'wecom:'+v.msgid,senderId:v.user_id});
      const draftInstruction='\n\n最新送审要求：先把 MP4 文件和实际视频名、完整简介、目标账号发回来源会话，等用户看完回复 OK 后才上传视频号草稿箱。不再要求手机预览二维码；本流程不授权公开发布。上传必须显式 syncDraft:true，并使用已审核的同一版本、标题、简介和目标账号。完成后向来源会话列出视频名、视频简介、文件名、版本、目标账号、草稿上传实际结果和记录号；不能只发完成通知或把本地入库说成草稿成功。'+(direct?.draft_request?'\n本条真实用户已确认收到的视频文件；只处理以下草稿上传请求。先核对 video-draft-approval.json、manifest 与 video-metadata.json；旧记录或结果不明时先查记录，不重复执行。仅在工具策略允许时保存草稿，不公开发布。\n'+JSON.stringify(direct.draft_request):'');
      if(!direct||direct.draft_request){
-      const prompt=(v.chattype==='single'?'来自已确认群成员的企业微信私聊任务。':'来自已授权企业微信群成员 @ 机器人的用户任务。')+'消息凭据 wecom:'+v.msgid+'；发起人 '+v.user_id+'。先读工作区 AGENTS.md。进度、最终答复、文章链接和视频附件全部回到本条消息的来源会话；私聊回本人，群消息回原群，不跨会话发送。关键阶段使用简短 commentary 给用户说明正在处理什么；这些内容会实时转发到来源会话。需要用户选方向、音色或试听确认时，先给真实小样或关键问题，在最终回复中明确等待选择后停止，收到下一条回复再继续，不要擅自全部做完才问。成品用 studio.py deliver，出站目的地由当前入站消息决定，禁止手动改成审核群、旧微信群或自动公开发布。只处理本条新任务，不补发历史稿件。\n\n'+v.text;
+      const prompt=(v.chattype==='single'?'来自已确认群成员的企业微信私聊任务。':'来自已授权企业微信群成员 @ 机器人的用户任务。')+'消息凭据 wecom:'+v.msgid+'；发起人 '+v.user_id+'。先读工作区 AGENTS.md。进度、最终答复、文章链接和视频附件全部回到本条消息的来源会话；私聊回本人，群消息回原群，不跨会话发送。关键阶段使用简短 commentary 给用户说明正在处理什么；这些内容会实时转发到来源会话。需要用户选方向、音色或试听确认时，先给真实小样或关键问题，在最终回复中明确等待选择后停止，收到下一条回复再继续，不要擅自全部做完才问。成品用 studio.py deliver，出站目的地由当前入站消息决定，禁止手动改成审核群、旧微信群或自动公开发布。只处理本条新任务，不补发历史稿件。\n\n'+v.text+(v.recovery_note?'\n\n本次人工恢复说明（保留原始用户任务）：'+v.recovery_note:'');
       if(!runTask)throw Error('Codex runner is not configured');
       const result=await runTask(prompt+draftInstruction,{messageId:v.msgid,onProgress:async text=>{
        v.progress=v.progress||[];const prior=v.progress.find(s=>s.text===text);if(prior)return prior.status==='sent';
@@ -115,7 +115,11 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
       v.status='interrupted';v.interrupted_at=now();write(p,v);
       const cp=path.join(inbox,digest(v.interrupt_requested_by)+'.json');
       if(fs.existsSync(cp)){const c=read(cp);c.stop_confirmed_at=now();if(c.status!=='queued')c.status='completed';write(cp,c);}
-     }else{v.status='outcome_unknown';v.error=errorDetails(error);write(p,v);onError(error,'production_task');}
+     }else{v.status='outcome_unknown';v.error=errorDetails(error);write(p,v);onError(error,'production_task');
+      const notice=/active writer/.test(String(error?.message))?'执行会话被占用，本次任务已停止，现有文件和回执已保留，需要恢复执行。':/timed out|deadline|timeout/i.test(String(error?.message))?'本次任务超时停止，现有文件和回执已保留，未自动重跑。':'本次任务处理异常，记录已保留，未自动重跑；请查询进度或联系维护。';
+      v.failure_notice={text:notice,status:'sending',at:now()};write(p,v);
+      try{await push(notice,replyTarget(v,binding));v.failure_notice.status='sent';}catch(noticeError){v.failure_notice.status='delivery_unknown';onError(noticeError,'failure_notice');}write(p,v);
+     }
     }
     activeRecord=undefined;
     const activePath=path.join(studio,'state/active-wecom-task.json');

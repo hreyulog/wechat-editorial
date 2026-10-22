@@ -4,6 +4,7 @@ import readline from 'node:readline';
 import {spawn} from 'node:child_process';
 import {write} from './production.mjs';
 import {turbopushCodexArgs} from './turbopush-mcp.mjs';
+import {editorialTurnTimeoutMs} from './runtime-recovery.mjs';
 
 // One native Codex app-server owns the thread; new input can steer the active turn.
 export function createCodexRunner({studio,stateDir,repository}){
@@ -71,7 +72,7 @@ export function createCodexRunner({studio,stateDir,repository}){
   }
   const completion=new Promise((resolve,reject)=>{
    const target={threadId,messageId,text:'',onProgress,chain:Promise.resolve(),resolve,reject,started:false};active=target;
-   target.timer=setTimeout(()=>reject(Error('Codex task deadline exceeded; outcome is unknown')),Number(process.env.CODEX_TIMEOUT_SECONDS||14400)*1000);
+   target.timer=setTimeout(()=>reject(Error('Codex task deadline exceeded; outcome is unknown')),editorialTurnTimeoutMs({turnTimeoutMs:Number(process.env.CODEX_TIMEOUT_SECONDS||14400)*1000}));
    request('turn/start',{threadId,cwd:studio,approvalPolicy:'never',input:[{type:'text',text:prompt,text_elements:[]}]}).then(result=>{
     target.turnId=result.turn?.id||target.turnId;if(!target.turnId)throw Error('Codex returned no turn ID');target.started=true;return finish(target);
    }).catch(error=>{if(active===target)active=undefined;clearTimeout(target.timer);reject(error);});

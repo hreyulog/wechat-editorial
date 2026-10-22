@@ -70,3 +70,23 @@ test('failed upload can resume video without repeating acknowledged article',asy
   assert.equal(textSends,0);assert.equal(videoSends,1);
  }finally{worker.stop();while(worker.isBusy())await new Promise(r=>setTimeout(r,10));fs.rmSync(temp,{recursive:true,force:true});}
 });
+
+test('a stopped task reports failure once to its source and does not replay',async()=>{
+ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'wecom-failure-')),root=path.join(temp,'bot'),studio=path.join(temp,'wechat-content-studio');
+ for(const p of [path.join(root,'state'),path.join(studio,'state'),path.join(studio,'outbox')])fs.mkdirSync(p,{recursive:true});
+ write(path.join(root,'state/binding.json'),binding);
+ const sends=[],errors=[];let attempts=0;
+ const client={isConnected:true,replyStream:async()=>({errcode:0}),sendMessage:async(chat,body)=>{sends.push({chat,text:body.markdown.content});return {errcode:0};}};
+ const worker=startProduction({client,botId:'test-bot',root,onError:e=>errors.push(e.message),runTask:async()=>{attempts++;throw Error('thread already has an active writer');}});
+ const frame={body:{chattype:'group',chatid:binding.chatid,from:{userid:'owner'},msgid:'failure',text:{content:'继续制作'}}};
+ try{
+  await worker.handle(frame);
+  for(let i=0;i<100&&worker.isBusy();i++)await new Promise(r=>setTimeout(r,10));
+  await worker.handle(frame);
+  const record=JSON.parse(fs.readFileSync(path.join(root,'state/inbox',sha('failure')+'.json'),'utf8'));
+  assert.equal(attempts,1);assert.equal(record.status,'outcome_unknown');
+  assert.equal(record.failure_notice.status,'sent');assert.equal(sends.length,1);
+  assert.equal(sends[0].chat,binding.chatid);assert.match(sends[0].text,/会话被占用/);
+  assert.equal(errors.length,1);
+ }finally{worker.stop();while(worker.isBusy())await new Promise(r=>setTimeout(r,10));fs.rmSync(temp,{recursive:true,force:true});}
+});
