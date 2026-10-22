@@ -24,12 +24,12 @@ flowchart LR
 |---|---|
 | `editorial/wecom-bot-local` | 官方 Bot、群绑定、任务队列、Codex app-server、即时控制、媒体压缩 |
 | `editorial/wechat-content-studio` | 版本管理、Remotion/排版、草稿接口、审核、可选 TurboPush 本地库 |
-
-视频号自动保存草稿已获用户授权，但现有 TurboPush 适配器只写本地库，未接入远端上传。工作机浏览器对视频号返回站点策略拒绝，不能借 TurboPush 间接绕过。机器人应明确报告具体工具限制及尚未上传，不能把它说成用户缺少授权或永远必须手动同步的业务规则。其他部署环境需按实际工具权限和独立正式上传通道判断，不能沿用登录状态或本地内容 ID 宣称成功。
 | `wechat-editorial-workflow` | 全流程 Skill |
 | `math-explainer-animation` | 数学 SVG 动画 Skill、模板和脚本 |
 | `st-petersburg-math-documentary` | 人物纪录片 Skill、字幕及声音脚本 |
 | `editorial/upstream/wechat-article-skills` | 固定版本的第三方排版与草稿构造辅助代码 |
+
+视频号自动保存草稿已获用户授权，但现有 TurboPush 适配器只写本地库，未接入远端上传。工作机浏览器对视频号返回站点策略拒绝，不能借 TurboPush 间接绕过。机器人应明确报告具体工具限制及尚未上传，不能把它说成用户缺少授权或永远必须手动同步的业务规则。其他部署环境需按实际工具权限和独立正式上传通道判断，不能沿用登录状态或本地内容 ID 宣称成功。
 
 ## 运行状态
 
