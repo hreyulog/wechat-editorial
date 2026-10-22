@@ -7,6 +7,8 @@ flowchart LR
   W --> Q[持久化任务队列]
   Q --> R[进度与审核直接路由]
   Q --> C[Codex CLI 串行制作]
+  C --> P[阶段说明 / 必要澄清]
+  P --> G
   C --> S[文章 / 视频 / 来源 / 版本]
   S --> QA[构建与真实编码检查]
   QA --> D[公众号官方草稿 API]
@@ -30,6 +32,8 @@ flowchart LR
 ## 运行状态
 
 入站 `state/inbox/<msgid哈希>.json` 保存真实消息、发起人、排队和执行结果。任务按接收时间串行进入 Codex。会话 ID 保存在 `state/codex-thread.json`，后续任务续用；没有已有任务时不创建、发送稿件。重启遇到执行中的任务置 outcome_unknown，先核对本地 Codex 会话和实际产物，不自动重做。
+
+制作中逐段转发用户可见的 assistant commentary，不转发推理或工具日志。需要用户选择时先问并结束本轮等待下一条回复；不会把整个任务先做完才提问题。CLI 缺少 phase 字段时按完整 assistant 消息转发，并避免在完成时重复同一条最终答复。执行中的新消息仍排队，当前尚不支持实时打断正在运行的任务。
 
 工作室 `jobs/C编号/vN` 保存 brief、源文件、输出、manifest、QA、真实审核与 official API 回执。每个版本不可原地覆盖已送审文件，修改创建下一版本。`outbox/*.json` 保存目的地、文件 SHA256、发送步骤和回执，必须由发送器独占写入。
 

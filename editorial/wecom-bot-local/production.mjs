@@ -66,14 +66,23 @@ export function startProduction({client,botId,root,onError,runTask}){
      const direct=await handleContentMessage({reply:async(_sender,text)=>{v.reply=text;write(p,v);}},
        {text:v.text,id:'wecom:'+v.msgid,senderId:v.user_id});
      if(!direct){
-      const prompt='来自已授权企业微信群成员 @ 机器人的用户任务。消息凭据 wecom:'+v.msgid+'；发起人 '+v.user_id+'。本群全体成员均已获准发起制作及修改任务。先读工作区 AGENTS.md。成品用 studio.py deliver 入队到已绑定企业微信群，禁止发到旧微信群或自动公开发布。只处理本条新任务，不补发历史稿件。\n\n'+v.text;
+      const prompt='来自已授权企业微信群成员 @ 机器人的用户任务。消息凭据 wecom:'+v.msgid+'；发起人 '+v.user_id+'。本群全体成员均已获准发起制作及修改任务。先读工作区 AGENTS.md。关键阶段使用简短 commentary 给群成员说明正在处理什么；这些内容会实时转发。需要用户选方向、音色或试听确认时，先给真实小样或关键问题，在最终回复中明确等待选择后停止，收到下一条回复再继续，不要擅自全部做完才问。成品用 studio.py deliver 入队到已绑定企业微信群，禁止发到旧微信群或自动公开发布。只处理本条新任务，不补发历史稿件。\n\n'+v.text;
       if(!runTask)throw Error('Codex runner is not configured');
-      const result=await runTask(prompt);
+      const result=await runTask(prompt,{onProgress:async text=>{
+       v.progress=v.progress||[];const prior=v.progress.find(s=>s.text===text);if(prior)return prior.status==='sent';
+       const progress={text,status:'sending',at:now()};v.progress.push(progress);write(p,v);
+       try{await push(text);progress.status='sent';progress.sent_at=now();}catch(error){progress.status='delivery_unknown';onError(error,'progress_delivery');}
+       write(p,v);return progress.status==='sent';
+      }});
       v.reply=result.text||'任务已处理，请查看送审内容或发送“任务列表”。';
       v.codex_thread_id=result.threadId;
+      if(result.progressFinalAttempted){
+       if(!result.progressFinalDelivered)throw Error('Final reply delivery is unknown; do not resend automatically');
+       v.skip_final_reply=true;
+      }
      }
      v.status='replying';v.finished_at=now();write(p,v);
-     await push(v.reply);v.status='completed';v.reply_ack_at=now();write(p,v);
+     if(!v.skip_final_reply)await push(v.reply);v.status='completed';v.reply_ack_at=now();write(p,v);
     }catch(error){v.status='outcome_unknown';v.error=errorDetails(error);write(p,v);onError(error,'production_task');}
     status.phase='waiting_for_group_task';delete status.active_message;save();
    }
@@ -114,6 +123,17 @@ export function startProduction({client,botId,root,onError,runTask}){
   write(p,{msgid:body.msgid,user_id:body.from.userid,chatid:body.chatid,text,received_at:now(),status:'queued'});
   // Only acknowledge a new real user task, never on startup or configuration changes.
   try{ack(await client.replyStream(frame,'task_'+crypto.randomUUID(),'收到，处理中',true));}catch(e){onError(e,'task_ack');}
+  if(/^(?:进度\s+C\d{4,}|任务列表)\s*$/.test(text)){
+   const record=read(p);record.status='direct_command';write(p,record);
+   try{
+    await handleContentMessage({reply:async(_sender,reply)=>{
+     if(status.active_message){const active=read(path.join(inbox,digest(status.active_message)+'.json'));const latest=active.progress?.at(-1);reply+='\n\n当前正在处理：'+active.text+(latest?'\n最近进度：'+latest.text:'');}
+     await push(reply);
+    }},{text,id:'wecom:'+body.msgid,senderId:body.from.userid});
+    record.status='completed';record.reply_ack_at=now();write(p,record);
+   }catch(error){record.status='outcome_unknown';record.error=errorDetails(error);write(p,record);onError(error,'status_reply');}
+   return true;
+  }
   void processInbox();return true;
  }};
 }
