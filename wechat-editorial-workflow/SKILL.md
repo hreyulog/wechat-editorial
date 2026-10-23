@@ -23,7 +23,7 @@ description: 自媒体运营工作台的制作与送审流程，支持选题排�
 2. 数学思想用 [数学动画 Skill](../math-explainer-animation/SKILL.md)，人物用 [纪录片 Skill](../st-petersburg-math-documentary/SKILL.md)。已有系列中的裸人物选题默认人物片；只有明确要求讲马尔可夫链等概念才转知识动画。人物片先读[系列风格](../st-petersburg-math-documentary/references/petersburg-series.md)，沿用切比雪夫的人物叙事、史料幻灯片、克制配乐和已选声音/字幕。用户明确要求完整视频时按要求制作；没有明确全片要求时遵循对应 Skill 的试片约定。
 3. 写实际源文件并 build。完整解码、抽取真实编码帧，实际查看画面。史实、数学、许可、字幕、声音逐项如实记录；未听审不标通过。
 4. 文章经上游排版工具生成内联样式；prepare 后查看官方正文的本地截图并绑定 HTML 哈希；submit 仅调用官方草稿接口创建一次，再 draft/get 取得真实预览链接。未知创建结果不自动再建。
-   含视频号作品时按 [原生视频卡片流程](../docs/ARTICLE-VIDEO.md)配置 channel_video，build/prepare 自动插入，官方读回核对真实作品 ID 和账号才送审。capture 可从用户保存的官方草稿提取真实字段，adopt 可采纳用户对当前草稿的手动插入。不得把短链接或未验证候选 ID 当作作品身份。
+   含视频号作品时按 [原生视频卡片流程](../docs/ARTICLE-VIDEO.md)配置 channel_video，保留全部原生卡片字段。送审前按绑定的同一个 media_id 实时读回，并核对 preview、receipt、readback 哈希和 manifest。原 ID 失效就停止，不按同名、相同正文或更新时间换稿，也不自动另建。capture/adopt 只采纳对应真实草稿的卡片；API 字段通过仍需用户手机确认显示和点播。不能把字段检查说成可播放。
 5. 视频在 video-metadata.json 写实际 title、完整 description、目标 account（优先 id/name），随 build 绑定 manifest。按 [视频审核后上传草稿](../docs/VIDEO-REVIEW.md) 先 deliver MP4 file 附件和完整文案；文章发真实官方草稿预览。全部回来源会话：私聊回本人、群消息回原群。视频超过传输预算时生成完整时长小副本，保留原片。文本已成功而附件明确失败仅续传附件，未知结果不自动重发。
 6. 用户看完回复“OK C编号-vN”或“确认上传 C编号-vN”，路由核对来源会话和实际 MP4 发送回执，生成 video-draft-approval.json / draft_request。同会话仅一个待审当前视频时可单独回复 OK。通过 TurboPush MCP publish_video 明确 syncDraft:true，使用同一版本、标题、简介和目标账号上传草稿；读回实际记录。OK 不授权公开发布。修改视频或文案须新版本重新审核；纯文章审核仍只记录审核。
 7. 返回视频名、完整视频简介、目标账号、版本、文件名、草稿上传实际状态和记录号，不能只发完成通知或用本地内容 id 冒充远端成功。不再要求视频号手机预览二维码。

@@ -7,6 +7,7 @@ test('commands distinguish stopping, steering and unrelated new tasks',()=>{
  assert.deepEqual(controlIntent('打断：换成女声'),{action:'interrupt',resume:true,text:'换成女声'});
  assert.equal(controlIntent('补充：不要配乐').action,'steer');
  assert.equal(controlIntent('新任务：做一篇马尔可夫文章').action,'queue');
+ assert.deepEqual(controlIntent('你开头两句写好发给我就行，不搞别的了'),{action:'interrupt',resume:true,text:'你开头两句写好发给我就行，不搞别的了'});
 });
 test('followup uses native control instead of queuing a duplicate task',async()=>{
  const record={msgid:'followup',text:'不要配乐',user_id:'member',status:'queued'},target={msgid:'original'};let calls=0;

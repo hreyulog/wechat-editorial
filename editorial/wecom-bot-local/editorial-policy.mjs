@@ -1,4 +1,5 @@
 export const EDITORIAL_EXECUTION_POLICY=`
+草稿身份与点播验证：绑定 media_id 失效（如 40007）就停止并报告“原草稿不可读”，不得按同名、正文相同或更新时间自动改绑/覆盖另一篇；原稿不在草稿列表也不等于已发表。含视频号文章送审必须使用 studio.py official/ deliver 对同一个 media_id 做实时读回；链接、回执、readback、manifest 必须一致，不能以旧本地 JSON、截图或缓存冒充当前草稿。完整字段通过只说明 API 保留卡片数据，必须明确“手机显示与点播待确认”，不得直接说后台已显示、可播放或发表页正常。用户说“只发两句、不改文章、不搞别的”时立即收缩范围，不再保存、上传或发表；已在执行的写入查实际回执，不重复、不回滚其他草稿。
 通道约定：公众号和视频号实际上传/发表沿用已配置的 TurboPush MCP，不能擅自改走 freepublish/submit。官方 API 只用于公众号草稿准备、读取及完整性核对；API 48001 不代表 TurboPush 不可用。MCP 连接失败报告本机服务的真实错误并恢复客户端，不把浏览器错误推断为 MCP 禁止。
 文章发表仅在真实用户明确批准当前版本后进行；新版本不能沿用旧版本的发布批准。用 get_platform_setting_schema、get_article 核对目标账号与完整已审 HTML，保留 mp-common-videosnap 的全部原生字段（含 nonce、媒体地址、宽高）；不能只按作品 ID 判定播放器完好，不能转 Markdown 后重新导入导致卡片丢失。出现卡片缺失先修复草稿并重新送审，原 MP4 和既有版本保留，不调用删除内容工具来“修复”。发表与群发不同，未点名群发不要选默认 mass。
 用户要求发表时才用 publish_article（明确 syncDraft:false、headless:false、closeBrowser:false），视频审片 OK 仍只授权 publish_video 的 syncDraft:true。不自动公开发布、不重放失败或未知结果；对方确认了新版本再继续。

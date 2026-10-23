@@ -66,6 +66,8 @@ test('article preview QR follows a sent review and rejects a superseded preview 
   assert.throws(()=>validatePreviewQr(item,f.studio,f.source),/not been delivered/);
   const parent=JSON.parse(fs.readFileSync(path.join(f.studio,'outbox/parent.json')));parent.status='sent';write(path.join(f.studio,'outbox/parent.json'),parent);
   assert.equal(validatePreviewQr(item,f.studio,f.source)[0].media_type,'image');
+  write(path.join(f.folder,'official-preview.json'),{url,valid:false});
+  assert.throws(()=>validatePreviewQr(item,f.studio,f.source),/no longer valid/);
   write(path.join(f.folder,'official-preview.json'),{url:url+'-new'});
   assert.throws(()=>validatePreviewQr(item,f.studio,f.source),/URL changed/);
   assert.throws(()=>previewQrParent({...item,parent_outbox:'../elsewhere.json'},f.studio),/Invalid/);

@@ -102,7 +102,7 @@ class ChannelVideoTests(unittest.TestCase):
         studio.write(self.folder/'article.json', {'title':'fixture','video_embed':{'source':'src/old.json'}})
         studio.write(self.folder/'official/receipt.json', {'media_id':'same-draft','manifest_sha256':digest})
         article = studio.read(self.folder/'article.json')
-        detail = {'news_item':[{'title':'fixture','content':card_html(self.descriptor)}]}
+        detail = {'news_item':[{'title':'fixture','content':card_html(self.descriptor),'url':'https://mp.weixin.qq.com/s?fixture=1'}]}
         with patch.object(studio,'get_job',return_value={}), patch.object(studio,'checked_manifest',return_value=(self.folder,{})), patch('official_api.OfficialClient') as client:
             client.return_value.request.return_value = detail
             result = adopt('C0001', self.descriptor['export_id'])

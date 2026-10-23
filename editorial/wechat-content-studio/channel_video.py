@@ -123,7 +123,8 @@ def adopt(job_id, export_id, version=None):
     # The user saved this same version manually. Bind its replacement card without
     # rewriting immutable local sources or round-tripping the remote HTML.
     from official_api import OfficialClient
-    from studio import checked_manifest, get_job, read, write, sha, now
+    from studio import checked_manifest, get_job, read, write, sha, now, official_url
+    from video_embed_check import verify_video_component
     folder, _ = checked_manifest(get_job(job_id), version)
     receipt = read(folder / 'official/receipt.json')
     if receipt['manifest_sha256'] != sha(folder / 'manifest.json'):
@@ -135,6 +136,20 @@ def adopt(job_id, export_id, version=None):
     item.update(manifest_sha256=receipt['manifest_sha256'], media_id=receipt['media_id'], adopted_at=now())
     write(folder / 'official/channel-binding.json', item)
     write(folder / 'official/readback.json', detail)
+    # Adoption changed the authoritative component. Refresh the linked metadata in
+    # this same read-only operation so delivery cannot reuse the previous proof.
+    check=verify_video_component(folder,read(folder/'article.json'),detail['news_item'][0].get('content',''))
+    ready=check['preserved'] and check['complete_native_attributes_required']
+    url=detail['news_item'][0].get('url','')
+    if url.startswith('http://mp.weixin.qq.com/'):url='https://'+url[len('http://'):]
+    url=official_url(url)
+    receipt.update(state='preview_available' if ready else 'video_embedding_incomplete',readback_at=now(),
+        readback_sha256=sha(folder/'official/readback.json'),video_component_check=check,
+        video_component_preserved=check['preserved'],phone_playback_tested=False,verification_scope='official_draft_fields_only')
+    receipt.pop('video_player_preserved',None)
+    write(folder/'official/receipt.json',receipt)
+    write(folder/'official-preview.json',{'url':url,'provenance':'official_api_draft_get','media_id':receipt['media_id'],
+        'attached_at':now(),'manifest_sha256':receipt['manifest_sha256'],'readback_sha256':receipt['readback_sha256'],'valid':ready})
     return {'job_id': job_id, 'adopted': True, 'remote_write': False, 'phone_playback_tested': False}
 
 

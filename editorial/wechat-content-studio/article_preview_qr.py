@@ -17,7 +17,8 @@ def enqueue(root, folder, parent_path):
     job_id=folder.parent.name;version=int(folder.name[1:])
     if parent.get('job_id')!=job_id or parent.get('version')!=version:raise ValueError('Review version differs')
     article=read(folder/'article.json')
-    require_deliverable_video(folder,article,sha(folder/'manifest.json'))
+    # deliver refreshed the draft before registering its parent text; keep that URL generation.
+    require_deliverable_video(folder,article,sha(folder/'manifest.json'),refresh=False)
     url=official_url(read(folder/'official-preview.json')['url'])
     url_hash=hashlib.sha256(url.encode()).hexdigest()
     # Never overwrite a previously delivered PNG when a temporary preview is refreshed.

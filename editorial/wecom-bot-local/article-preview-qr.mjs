@@ -17,7 +17,9 @@ export function validatePreviewQr(item,studio,source){
  if(!source||source.msgid!==item.source_message_id||item.destination?.chatid!==(source.chattype==='single'?source.user_id:source.chatid))throw Error('Preview QR source conversation mismatch');
  const folder=fs.realpathSync(path.join(studio,'jobs',item.job_id,'v'+item.version));
  if(sha(fs.readFileSync(path.join(folder,'manifest.json')))!==item.manifest_sha256)throw Error('Preview QR version changed');
- const url=read(path.join(folder,'official-preview.json')).url,parsed=new URL(url);
+ const preview=read(path.join(folder,'official-preview.json'));
+ if(preview.valid===false)throw Error('The bound official draft preview is no longer valid');
+ const url=preview.url,parsed=new URL(url);
  if(parsed.protocol!=='https:'||parsed.host!=='mp.weixin.qq.com'||!(parsed.pathname==='/s'||parsed.pathname.startsWith('/s/'))||sha(url)!==item.preview_url_sha256)throw Error('Preview QR URL changed or is not official');
  if(item.files?.length!==1)throw Error('Expected one preview PNG');
  const file=item.files[0],target=fs.realpathSync(file.path),rel=path.relative(path.join(folder,'review-qr'),target);

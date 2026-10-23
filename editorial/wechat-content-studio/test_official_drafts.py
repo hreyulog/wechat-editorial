@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import official_drafts as drafts
 from official_api import OfficialClient
+from official_api import ApiError
 import studio
 import turbopush_local
 
@@ -54,6 +55,17 @@ class DraftTests(unittest.TestCase):
         with self.assertRaises(ValueError):client.request('/freepublish/submit',{'media_id':'fixture'})
         with self.assertRaises(ValueError):turbopush_local.request_local('/sse/video/1',{})
 
+    def test_expired_media_id_invalidates_old_preview_without_creating_a_new_draft(self):
+        studio.write(self.output/'receipt.json',{'state':'preview_available','media_id':'deleted-media','thumb_media_id':'fixture-cover'})
+        studio.write(self.folder/'official-preview.json',{'url':'https://mp.weixin.qq.com/s?old=1','media_id':'deleted-media'})
+        with patch.object(drafts,'OfficialClient') as cls,patch.object(drafts,'publish_helpers') as helpers:
+            cls.return_value.request.side_effect=ApiError(40007,'invalid media_id')
+            with self.assertRaises(ApiError):drafts.submit(self.job['id'])
+            cls.return_value.request.assert_called_once_with('/draft/get',{'media_id':'deleted-media'})
+            helpers.return_value.create_draft.assert_not_called()
+        self.assertFalse(studio.read(self.folder/'official-preview.json')['valid'])
+        self.assertEqual(studio.read(self.output/'receipt.json')['state'],'draft_unavailable')
+
     def test_successful_draft_without_requested_video_is_not_ready_for_review(self):
         studio.write(self.folder/'article.json',{'video_embed':{'source':'src/video.json'}})
         (self.folder/'src').mkdir(exist_ok=True)
@@ -63,7 +75,7 @@ class DraftTests(unittest.TestCase):
             cls.return_value.request.return_value={'news_item':[{'title':'fixture','content':'<p>caption only</p>','url':'https://mp.weixin.qq.com/s/fixture'}]}
             result=drafts.submit(self.job['id'])
         self.assertFalse(result['ready_for_review'])
-        self.assertFalse(result['video_player_preserved'])
+        self.assertFalse(result['video_component_preserved'])
         self.assertEqual(result['state'],'video_embedding_incomplete')
         self.assertFalse(result['published'])
 

@@ -226,6 +226,10 @@ def deliver(job_id, version=None):
                       '视频审片：MP4 文件附件随本任务发送；看完确认后才上传视频号草稿箱。'])
         files.append({'path': str(folder / 'review.mp4'), 'sha256': manifest['outputs']['review.mp4']})
     official = folder / 'official-preview.json'
+    if job['kind'] != 'video' and official.exists() and read(official).get('valid') is False:
+        set_status(job,'awaiting_official_preview')
+        return {'job_id':job_id,'version':number,'status':job['status'],'queued':False,
+                'blocker':'The bound official draft preview is unavailable; refresh the exact draft identity'}
     if job['kind'] != 'video' and official.exists() and (folder/'article.json').is_file():
         try: require_deliverable_video(folder, read(folder/'article.json'), sha(folder/'manifest.json'))
         except (ValueError, FileNotFoundError) as error:
@@ -233,6 +237,9 @@ def deliver(job_id, version=None):
             return {'job_id':job_id, 'version':number, 'status':job['status'], 'queued':False, 'blocker':str(error)}
     if job['kind'] != 'video' and official.exists():
         parts.append('公众号草稿预览：' + official_url(read(official)['url']))
+        if (folder/'article.json').is_file() and read(folder/'article.json').get('channel_video'):
+            confirmed=read(folder/'official/receipt.json').get('phone_playback_tested') is True
+            parts.append('视频号卡片：同一草稿与版本已获用户手机点播确认。' if confirmed else '视频号卡片：已按同一草稿 ID 刷新核对完整字段；手机显示与点播待你确认。')
     elif job['kind'] != 'video':
         set_status(job, 'awaiting_official_preview')
         if not files: return {'job_id': job_id, 'status': job['status'], 'queued': False,

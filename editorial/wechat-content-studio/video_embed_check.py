@@ -74,10 +74,11 @@ def verify_video_component(folder, article, content):
                         for item in found)
     return {'required': True, 'kind': expected['kind'], 'expected_id': expected['id'],
             'preserved': preserved, 'complete_native_attributes_required': bool(expected.get('native_attributes')),
+            'verification_scope': 'official_draft_fields_only',
             'phone_playback_tested': False, 'published_page_playback_tested': False}
 
 
-def require_deliverable_video(folder, article, manifest_sha256):
+def require_deliverable_video(folder, article, manifest_sha256, *, refresh=True):
     expected = video_requirement(folder, article)
     if expected is None:
         return
@@ -90,3 +91,7 @@ def require_deliverable_video(folder, article, manifest_sha256):
     items = detail.get('news_item') or []
     if len(items) != 1 or not verify_video_component(folder, article, items[0].get('content', ''))['preserved']:
         raise ValueError('官方草稿未保留所需视频组件；视频尚未插入，不能当作完整成稿送审。')
+    if expected['kind']=='channels':
+        from draft_identity import refresh_native_readback,check_local_binding
+        if refresh:refresh_native_readback(folder,article,receipt,manifest_sha256)
+        else:check_local_binding(folder,receipt,manifest_sha256)
