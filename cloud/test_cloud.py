@@ -88,6 +88,7 @@ class CloudTests(unittest.TestCase):
                 'EDITORIAL_CLOUD':'1','EDITORIAL_ADMIN_PASSWORD':'test-only-long-password',
                 'EDITORIAL_PUBLIC_ORIGIN':'https://editorial.example.test'}):
             app=web.Server(0,web.Workbench(folder,folder,folder))
+            app.cloud_import_auth=Mock(return_value={'phase':'authenticated'})
             thread=threading.Thread(target=app.serve_forever,daemon=True);thread.start()
             try:
                 target=f'http://127.0.0.1:{app.server_port}'
@@ -103,6 +104,19 @@ class CloudTests(unittest.TestCase):
                 request.add_header('Origin','https://attacker.example.test')
                 with self.assertRaises(urllib.error.HTTPError) as error:urllib.request.urlopen(request)
                 self.assertEqual(error.exception.code,403)
+                headers={'Host':'editorial.example.test','Content-Type':'application/json','Authorization':'Basic '+token}
+                body=json.dumps({'auth':{'fixture':'private-test'}}).encode()
+                for origin in (None,'https://attacker.example.test'):
+                    attempt=urllib.request.Request(target+'/api/cloud/auth/import',data=body,
+                        headers={**headers,**({'Origin':origin} if origin else {})})
+                    with self.assertRaises(urllib.error.HTTPError) as error:urllib.request.urlopen(attempt)
+                    self.assertEqual(error.exception.code,403)
+                app.cloud_import_auth.assert_not_called()
+                attempt=urllib.request.Request(target+'/api/cloud/auth/import',data=body,
+                    headers={**headers,'Origin':'https://editorial.example.test'})
+                with urllib.request.urlopen(attempt) as response:
+                    self.assertEqual(json.load(response),{'phase':'authenticated'})
+                app.cloud_import_auth.assert_called_once_with({'auth':{'fixture':'private-test'}})
             finally:app.shutdown();app.server_close();thread.join()
 
     def test_build_archive_preserves_unicode_resources_without_unicode_entries(self):
