@@ -23,6 +23,20 @@ def module(name, path):
 
 
 class CloudTests(unittest.TestCase):
+    def test_explicit_account_import_requires_complete_chatgpt_cache_and_redacts_errors(self):
+        from cloud.account_auth import validate_cache,validate_model,safe_failure
+        value={'auth_mode':'chatgpt','tokens':{'access_token':'private-access','refresh_token':'private-refresh',
+            'id_token':'private-id','account_id':'private-account'},'OPENAI_API_KEY':None,'ignored':'never copied'}
+        copied=json.loads(validate_cache(value))
+        self.assertNotIn('ignored',copied)
+        self.assertEqual(copied['tokens'],value['tokens'])
+        for bad in ({},{**value,'auth_mode':'api'},{**value,'tokens':{}},{**value,'OPENAI_API_KEY':'private-key'}):
+            with self.assertRaises(ValueError):validate_cache(bad)
+        self.assertEqual(validate_model('gpt-6.1-sol'),'gpt-6.1-sol')
+        with self.assertRaises(ValueError):validate_model('model\nsecret')
+        safe=safe_failure('403 private-refresh at https://example.test?token=private-access',value)
+        self.assertIn('403',safe);self.assertNotIn('private-',safe);self.assertNotIn('https://',safe)
+
     def test_model_provider_requires_explicit_secure_configuration_and_keeps_key_out_of_toml(self):
         from cloud.model_config import validate,provider_toml
         import tomllib

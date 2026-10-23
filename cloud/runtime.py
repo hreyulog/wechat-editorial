@@ -15,6 +15,7 @@ from pathlib import Path
 from cloud.store import ROOT, Store
 from cloud import desktop
 from cloud.model_config import provider_toml
+from cloud.account_auth import validate_cache, validate_model, safe_failure
 
 os.environ['EDITORIAL_CLOUD']='1'
 os.environ['EDITORIAL_LOCAL_TOKEN']=secrets.token_urlsafe(32)
@@ -25,6 +26,68 @@ store=None
 child=None
 login_process=None
 login_state={'phase':'not_started'}
+auth_guard=threading.Lock()
+auth_check={'phase':'not_started'}
+
+
+def model_busy():
+    for path in (bot/'state/inbox').glob('*.json'):
+        if json.loads(path.read_text(encoding='utf-8')).get('status') in ('running','replying'):
+            return True
+    return False
+
+
+def import_account_auth(data):
+    """Private admin endpoint, only called after an explicit operator cache selection."""
+    if not store or not status['mysql']:raise ValueError('Storage is not ready')
+    if not isinstance(data,dict):raise ValueError('JSON object required')
+    raw=validate_cache(data.get('auth'));model=validate_model(data.get('model'))
+    with auth_guard:
+        if model_busy() or auth_check.get('phase')=='checking' or (login_process and login_process.poll() is None):
+            raise ValueError('Wait for the current task or login before replacing account credentials')
+        if os.environ.get('EDITORIAL_MODEL_API_KEY') or os.environ.get('OPENAI_API_KEY'):
+            raise ValueError('This installation already uses a separate API provider')
+        store.secret('codex_auth',raw)
+        home=Path(os.environ['CODEX_HOME']);target=home/'auth.json';temp=home/'auth.import.tmp'
+        temp.write_bytes(raw);temp.chmod(0o600);temp.replace(target)
+        if model:
+            store.secret('codex_account_model',model.encode());os.environ['CODEX_MODEL']=model
+        login_state.clear();login_state.update(phase='authenticated',method='operator_import')
+        auth_check.clear();auth_check.update(phase='not_started')
+    return {'phase':'authenticated','method':'operator_import','model':model}
+
+
+def check_account_auth():
+    """One fixed read-only model turn. No publication, messaging or user-chosen command."""
+    with auth_guard:
+        if auth_check.get('phase')=='checking':return dict(auth_check)
+        if not store or model_busy():raise ValueError('Wait for storage and an idle worker')
+        home=Path(os.environ['CODEX_HOME']);target=home/'auth.json'
+        if not target.exists():raise ValueError('Account is not logged in')
+        auth=json.loads(target.read_text());validate_cache(auth)
+        auth_check.clear();auth_check.update(phase='checking')
+        def run():
+            try:
+                args=['codex','exec','--skip-git-repo-check','--sandbox','read-only','--ephemeral',
+                    '-c','approval_policy="never"','--json']
+                if os.environ.get('CODEX_MODEL'):args+=['--model',os.environ['CODEX_MODEL']]
+                args+=['Reply with exactly CLOUD_CODEX_OK. Do not call tools or inspect files.']
+                result=subprocess.run(args,cwd='/tmp',env=os.environ,capture_output=True,text=True,timeout=90)
+                success=False
+                for line in result.stdout.splitlines():
+                    try:
+                        value=json.loads(line);item=value.get('item',{})
+                        if item.get('type')=='agent_message' and item.get('text','').strip()=='CLOUD_CODEX_OK':success=True
+                    except (ValueError,TypeError):pass
+                auth_check.clear();auth_check.update(phase='verified' if result.returncode==0 and success else 'failed',exit_code=result.returncode)
+                if auth_check['phase']=='failed':auth_check['error']=safe_failure(result.stderr+'\n'+result.stdout,auth)
+                store.secret('codex_auth',target.read_bytes())
+            except subprocess.TimeoutExpired:
+                auth_check.clear();auth_check.update(phase='failed',error='Model authentication check timed out after 90 seconds')
+            except Exception as error:
+                auth_check.clear();auth_check.update(phase='failed',error_type=type(error).__name__)
+        threading.Thread(target=run,daemon=True).start()
+        return dict(auth_check)
 
 
 def cloud_login():
@@ -84,10 +147,18 @@ def cloud_status():
         path=bot/'state'/name
         if path.exists():
             value=json.loads(path.read_text(encoding='utf-8'))
-            result[field]={key:value[key] for key in ('phase','authenticated','updated_at','phrase') if key in value}
-    result['group_bound']=(bot/'state/binding.json').exists()
+            result[field]={key:value[key] for key in ('phase','authenticated','socket_connected','updated_at','phrase','received_messages','last_message','last_error') if key in value}
+    binding_path=bot/'state/binding.json'
+    binding=json.loads(binding_path.read_text()) if binding_path.exists() else {}
+    result['group_bound']=bool(binding.get('chatid'))
+    if result.get('stage')=='bot' and result.get('phase')=='waiting_for_group_binding' and result['group_bound']:
+        result['phase']='running'
+    result['private_messages']=binding.get('private_messages','disabled')
+    production=bot/'state/production.json'
+    if production.exists():result['worker']={'phase':json.loads(production.read_text()).get('phase')}
     result['codex_authenticated']=bool(os.environ.get('EDITORIAL_MODEL_API_KEY') or os.environ.get('OPENAI_API_KEY')) or (Path(os.environ['CODEX_HOME'])/'auth.json').exists()
     result['codex_login']=dict(login_state)
+    result['codex_check']=dict(auth_check)
     result['turbopush']=dict(desktop.turbo_status)
     return result
 
@@ -121,14 +192,18 @@ def start_worker():
         restored_auth=store.secret('codex_auth')
         if restored_auth:
             (home/'auth.json').write_bytes(restored_auth);(home/'auth.json').chmod(0o600)
+            model=store.secret('codex_account_model')
+            if model:os.environ['CODEX_MODEL']=validate_model(model.decode())
         desktop.start(store)
-        # Never bundle desktop credentials. An operator may explicitly supply an API key.
+        # Credentials are never bundled; explicit account import uses the private admin API.
         if os.environ.get('OPENAI_API_KEY'):
             result=subprocess.run(['codex','login','--with-api-key'],input=os.environ['OPENAI_API_KEY'],
                 text=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30)
             if result.returncode:raise RuntimeError('Codex API login failed')
         args=['node',str(bot/'bridge.mjs')]
-        if not (bot/'state/binding.json').exists():args.append('--bind')
+        binding_path=bot/'state/binding.json'
+        binding=json.loads(binding_path.read_text()) if binding_path.exists() else {}
+        if not binding.get('chatid'):args.append('--bind')
         # Logs may include user content or auth errors: keep them off public build logs.
         log=Path('/tmp/editorial-bot.log').open('ab')
         child=subprocess.Popen(args,cwd=ROOT,env=os.environ,stdout=log,stderr=log)
@@ -178,6 +253,8 @@ def main():
         module.Workbench(studio,bot,ROOT/'editorial/workbench/state'),host='127.0.0.1' if proxy else '0.0.0.0')
     server.cloud_status=cloud_status
     server.cloud_login=cloud_login
+    server.cloud_import_auth=import_account_auth
+    server.cloud_check_auth=check_account_auth
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
     threading.Thread(target=start_worker,daemon=True).start()
     server.serve_forever()

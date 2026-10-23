@@ -8,6 +8,29 @@ import {authorized,eligible,startProduction,write} from './production.mjs';
 const sha=s=>crypto.createHash('sha256').update(s).digest('hex');
 const binding={enabled:true,chatid:'group',group_members:'all',private_messages:'known_members',private_user_ids:['owner'],bot_id_sha256:sha('bot'),activated_at:'2026-01-01T00:00:00Z'};
 
+test('explicit private access works before group binding and keeps each sender as the target',async()=>{
+ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'wecom-private-')),root=path.join(temp,'bot'),studio=path.join(temp,'wechat-content-studio');
+ for(const folder of [path.join(root,'state'),path.join(studio,'state'),path.join(studio,'outbox')])fs.mkdirSync(folder,{recursive:true});
+ write(path.join(studio,'config.json'),{});
+ const mutable={...binding,chatid:null,private_messages:'all',private_user_ids:[]};
+ const sends=[],runs=[];
+ const worker=startProduction({root,botId:'bot',bindingOverride:mutable,onError:e=>{throw e;},
+  client:{isConnected:true,replyStream:async()=>({errcode:0}),sendMessage:async(chat,body)=>{sends.push({chat,text:body.markdown.content});return {errcode:0};}},
+  runTask:async(prompt,{messageId,onProgress})=>{runs.push(messageId);await onProgress('progress '+messageId);return{text:'done '+messageId};}});
+ const frame=(chat,userid,id,bot='bot')=>({body:{chattype:chat,chatid:chat==='group'?'group':undefined,aibotid:bot,from:{userid},msgid:id,text:{content:'new task'}}});
+ const wait=async n=>{for(let i=0;i<150;i++){if(sends.length>=n)return;await new Promise(r=>setTimeout(r,20));}assert.fail('Replies did not arrive');};
+ try{
+  assert.equal(await worker.handle(frame('group','owner','unbound')),false);
+  assert.equal(await worker.handle(frame('single','first','wrong','another-bot')),false);
+  assert.equal(await worker.handle(frame('single','first','one')),true);await wait(2);
+  assert.equal(await worker.handle(frame('single','second','two')),true);await wait(4);
+  Object.assign(mutable,{chatid:'group'});
+  assert.equal(await worker.handle(frame('group','third','three')),true);await wait(6);
+  assert.deepEqual(runs,['one','two','three']);
+  assert.deepEqual(sends.map(s=>s.chat),['first','first','second','second','group','group']);
+ }finally{worker.stop();while(worker.isBusy())await new Promise(r=>setTimeout(r,10));fs.rmSync(temp,{recursive:true,force:true});}
+});
+
 test('private delivery requires a known sender and the matching inbound receipt',()=>{
  const source={chattype:'single',user_id:'owner',msgid:'private1'};
  const item={status:'queued',created_at:'2027-01-01T00:00:00Z',destination:{provider:'wecom',chatid:'owner'},source_message_id:'private1'};

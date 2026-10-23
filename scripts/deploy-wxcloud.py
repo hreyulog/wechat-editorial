@@ -97,7 +97,7 @@ def deploy(args):
         WECOM_BOT_ID=credentials['botid.txt'],WECOM_BOT_SECRET=credentials['qiyesecret.txt'],
         WECHAT_APPID=credentials['appid.txt'],WECHAT_APPSECRET=credentials['appsecret.txt'],
         WXCLOUD_APPID=client.appid,WXCLOUD_CLI_KEY=client.key,
-        CODEX_TIMEOUT_SECONDS='14400',PORT='8080')
+        CODEX_TIMEOUT_SECONDS='14400',WECOM_PRIVATE_MESSAGES='all',PORT='8080')
     if args.openai_key_file:
         params['OPENAI_API_KEY']=args.openai_key_file.read_text(encoding='utf-8-sig').strip()
     if args.model_config_file:

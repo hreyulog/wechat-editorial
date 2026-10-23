@@ -416,6 +416,16 @@ class Handler(BaseHTTPRequestHandler):
                 raise PermissionError()
             if self.server.cloud_origin and self.path == '/api/cloud/auth/device':
                 return self.json(200, self.server.cloud_login())
+            if self.server.cloud_origin and self.path == '/api/cloud/auth/check':
+                return self.json(200, self.server.cloud_check_auth())
+            if self.server.cloud_origin and self.path == '/api/cloud/auth/import':
+                if self.headers.get_content_type() != 'application/json':
+                    return self.json(400, {'error':'JSON required'})
+                length = int(self.headers.get('Content-Length', 0))
+                if not 0 < length <= 24000:
+                    return self.json(413, {'error':'请求过大或为空'})
+                data = json.loads(self.rfile.read(length))
+                return self.json(200, self.server.cloud_import_auth(data))
             if self.path != '/api/plans' or self.headers.get_content_type() != 'application/json':
                 return self.json(404, {'error':'操作不存在'})
             length = int(self.headers.get('Content-Length', 0))

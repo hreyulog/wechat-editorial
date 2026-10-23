@@ -41,15 +41,33 @@ const phrase=previousChallenge&&Date.now()-Date.parse(previousChallenge.created_
  ?previousChallenge.phrase:crypto.randomBytes(4).toString('hex');
 const studio=path.resolve(root,'../wechat-content-studio');
 let worker,runner,closing=false;
+let binding;
+const privateAll=process.env.EDITORIAL_CLOUD&&process.env.WECOM_PRIVATE_MESSAGES==='all';
+const activateWorker=()=>{
+ runner=createCodexRunner({studio,stateDir,repository});
+ worker=startProduction({client,botId,root,onError,runTask:runner,controlTask:runner.control,bindingOverride:binding});
+};
 if(bind){
  if(process.env.EDITORIAL_CLOUD)write(path.join(stateDir,'binding-challenge.json'),{phrase,created_at:previousChallenge?.phrase===phrase?previousChallenge.created_at:new Date().toISOString()});
  else console.log('请在目标企业微信群 @ 此机器人，发送：绑定审核群 '+phrase);
+ if(privateAll){
+  const bindingPath=path.join(stateDir,'binding.json');
+  binding=fs.existsSync(bindingPath)?JSON.parse(fs.readFileSync(bindingPath,'utf8')):
+   {enabled:true,chatid:null,group_members:'all',private_user_ids:[],bot_id_sha256:crypto.createHash('sha256').update(botId).digest('hex'),activated_at:new Date().toISOString(),historical_backlog_enabled:false};
+  binding.private_messages='all';write(bindingPath,binding);activateWorker();
+ }
 }
 else{
  if(!fs.existsSync(path.join(stateDir,'binding.json')))throw Error('Run npm run bind to select a group before starting the bot');
- runner=createCodexRunner({studio,stateDir,repository});
- worker=startProduction({client,botId,root,onError,runTask:runner,controlTask:runner.control});
+ binding=JSON.parse(fs.readFileSync(path.join(stateDir,'binding.json'),'utf8'));
+ if(privateAll){binding.private_messages='all';write(path.join(stateDir,'binding.json'),binding);}
+ activateWorker();
 }
+client.on('message',frame=>{
+ const b=frame.body||{};
+ state.received_messages=(state.received_messages||0)+1;
+ state.last_message={received_at:new Date().toISOString(),chattype:b.chattype,msgtype:b.msgtype,bot_matches:!b.aibotid||b.aibotid===botId};save();
+});
 client.on('authenticated',()=>{state.authenticated=true;state.phase=bind?'waiting_for_binding':'waiting_for_group_task';save();console.log('Enterprise bot authenticated.');});
 client.on('disconnected',()=>{state.authenticated=false;state.phase='disconnected';save();});
 client.on('error',e=>onError(e,'sdk'));
@@ -57,15 +75,20 @@ client.on('message.text',frame=>{void (async()=>{
  if(closing)return;
  if(!bind){await worker.handle(frame);return;}
  const b=frame.body||{};
- if(b.chattype!=='group'||!b.chatid||!b.from?.userid||(b.aibotid&&b.aibotid!==botId)||taskText(b.text?.content)!=='绑定审核群 '+phrase)return;
- const binding={enabled:true,chatid:b.chatid,group_members:'all',private_messages:'known_members',private_user_ids:[b.from.userid],bot_id_sha256:crypto.createHash('sha256').update(botId).digest('hex'),activated_at:new Date().toISOString(),historical_backlog_enabled:false};
+ if(b.chattype==='single'&&worker){await worker.handle(frame);return;}
+ const match=/绑定审核群\s+([a-f0-9]{8})\s*$/u.exec(taskText(b.text?.content));
+ if(b.chattype!=='group'||!b.chatid||!b.from?.userid||(b.aibotid&&b.aibotid!==botId)||match?.[1]!==phrase){
+  state.last_message={...state.last_message,binding_result:match?'challenge_mismatch':'binding_text_not_matched'};save();return;
+ }
+ const approved={enabled:true,chatid:b.chatid,group_members:'all',private_messages:privateAll?'all':'known_members',private_user_ids:[b.from.userid],bot_id_sha256:crypto.createHash('sha256').update(botId).digest('hex'),activated_at:binding?.activated_at||new Date().toISOString(),historical_backlog_enabled:false};
+ if(binding)Object.assign(binding,approved);else binding=approved;
  write(path.join(stateDir,'binding.json'),binding);
  const configPath=path.join(studio,'config.json'),config=JSON.parse(fs.readFileSync(configPath,'utf8'));
  config.review_destination={provider:'wecom',chatid:b.chatid,display_name:'企业微信审核群'};write(configPath,config);
  if(process.env.EDITORIAL_CLOUD){
-  bind=false;runner=createCodexRunner({studio,stateDir,repository});
-  worker=startProduction({client,botId,root,onError,runTask:runner,controlTask:runner.control});
+  bind=false;if(!worker)activateWorker();
   state.phase='waiting_for_group_task';save();
+  await client.replyStream(frame,'binding_'+crypto.randomUUID(),'本群已绑定。支持群里 @ 我，也支持私聊；进度和成品都会回复到发起任务的原会话。',true);
  }else{console.log('Group binding saved locally. No sample, historical artifact, or notification was sent.');client.disconnect();process.exit(0);}
  })().catch(e=>onError(e,'message'));});
 let timer;

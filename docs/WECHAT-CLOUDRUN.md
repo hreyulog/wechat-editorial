@@ -64,7 +64,7 @@ Web 与执行容器可以作为同一环境中的两个服务，也可以先用�
 2. **消息与恢复**：新真实回调先落 MySQL，再答“收到，处理中”；重启中的 running/replying/sending 保持未知，不重放。
 3. **文件与版本**：真实 MP4/图片/Codex 会话检查点进入私有 COS；重启恢复后 SHA256 相同；版本和已审文案不能偷偷改变。
 4. **长任务与租约**：固定最小/最大实例为 1，MySQL advisory lock 防止滚动版本重复接单；长任务独立于 HTTP 请求时限，最长 4 小时。
-5. **Codex 授权**：用户在云端独立授权或显式提供 API Key 后，用真实企微消息完成一次执行并验证检查点恢复；不复制桌面缓存。
+5. **Codex 授权**：用户在云端登录、明确授权导入本机账号缓存或显式提供 API Key 后，用真实企微消息完成一次执行并验证检查点恢复。账号缓存只经管理员认证的 HTTPS 导入加密凭证表，绝不打包。
 6. **TurboPush**：在云端图形界面重新登录，MCP 查询实际目标账号；确认审片版本后调用 publish_video 的 syncDraft:true 并查询真实草稿记录。安装二进制、MCP 配置和旧 Windows 成功都不代替该测试。
 7. **隔离**：本次为不同 Bot，保留工作机实例；新群通过真实消息绑定，不迁移旧群绑定、历史发送队列和审核批准，不自动公开发表。
 
@@ -82,6 +82,20 @@ python scripts/inspect-wxcloud.py \
 脚本依据发布的 `@wxcloud/cli@2.3.3` 中 `lib/api/base.js` 与 `cloudapiDirect.js` 实现，限定只读云 API。凭证从本机文件读取，不以命令行参数值传入，不写入 Git。输出仅包含环境、服务及域名清单；不能用它创建、更新或删除云资源。
 
 ## 官方参考
+
+### 使用已有 Codex 账号
+
+云端设备码申请曾实测返回 403，这不等于账号授权方式不可用。官方文档也支持先在本机登录，然后把 `auth.json` 迁移到自己的无浏览器运行环境。明确授权后可以运行：
+
+```powershell
+python scripts/import-cloud-codex.py --private-file /private/deployment-private.json --auth-file /private/selected-auth.json --config-file /private/selected-config.toml
+```
+
+脚本只读选定缓存及模型名，经 HTTPS 管理员认证和同源检查导入；不把令牌放入参数、环境变量、构建包或日志。云端以 AES-GCM 加密保存到 MySQL，在容器内以 0600 权限恢复，后续刷新也保留加密快照。导入后会执行一次固定的只读模型探测，`codex_authenticated` 只说明缓存存在，`codex_check.phase=verified` 才是实际调用成功。云端网络、模型权限及账号额度仍以真实响应为准。
+
+新云端 Bot 显式开启 `WECOM_PRIVATE_MESSAGES=all`，未绑定群时也能接收本 Bot 的真实私聊；群绑定仍需真实群消息和随机口令。私聊进度、结果和媒体全部回本人，群消息回对应群。接收诊断只暴露计数、类型、时间及匹配结果，不显示正文或用户标识。
+
+- [Codex 官方认证与无浏览器环境登录](https://developers.openai.com/codex/auth/)
 
 - [微信云托管 Python 容器模板](https://github.com/WeixinCloud/wxcloudrun-flask)
 - [微信云托管 CLI](https://www.npmjs.com/package/@wxcloud/cli)

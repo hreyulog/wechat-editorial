@@ -107,7 +107,7 @@ class Store:
             SecretKey=c['secretkey'],Token=c['token'],Scheme='https'))
 
     def secret(self, name, value=None):
-        """Only credentials created by an explicit cloud login; no desktop cache import."""
+        """Credentials from cloud login or explicit operator import; encrypted at rest."""
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
         cipher=AESGCM(base64.b64decode(os.environ['EDITORIAL_MASTER_KEY']))
         associated=(self.namespace+':'+name).encode()
