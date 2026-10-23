@@ -23,6 +23,18 @@ def module(name, path):
 
 
 class CloudTests(unittest.TestCase):
+    def test_model_provider_requires_explicit_secure_configuration_and_keeps_key_out_of_toml(self):
+        from cloud.model_config import validate,provider_toml
+        import tomllib
+        value={'base_url':'https://model.example/v1','model':'fixture-model','api_key':'private-test-key'}
+        self.assertEqual(validate(value),value)
+        text=provider_toml(value['base_url'],value['model']);parsed=tomllib.loads(text)
+        self.assertNotIn(value['api_key'],text)
+        self.assertEqual(parsed['model_providers']['cloud_model']['env_key'],'EDITORIAL_MODEL_API_KEY')
+        self.assertFalse(parsed['model_providers']['cloud_model']['requires_openai_auth'])
+        for url in ('http://model.example/v1','https://user:password@model.example/v1','https://model.example/v1?key=bad'):
+            with self.assertRaises(ValueError):validate({**value,'base_url':url})
+
     def test_failed_database_commit_does_not_update_local_record(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);path=root/'editorial/wecom-bot-local/state/inbox/one.json'

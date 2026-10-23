@@ -14,6 +14,7 @@ from pathlib import Path
 
 from cloud.store import ROOT, Store
 from cloud import desktop
+from cloud.model_config import provider_toml
 
 os.environ['EDITORIAL_CLOUD']='1'
 os.environ['EDITORIAL_LOCAL_TOKEN']=secrets.token_urlsafe(32)
@@ -85,7 +86,7 @@ def cloud_status():
             value=json.loads(path.read_text(encoding='utf-8'))
             result[field]={key:value[key] for key in ('phase','authenticated','updated_at','phrase') if key in value}
     result['group_bound']=(bot/'state/binding.json').exists()
-    result['codex_authenticated']=bool(os.environ.get('OPENAI_API_KEY')) or (Path(os.environ['CODEX_HOME'])/'auth.json').exists()
+    result['codex_authenticated']=bool(os.environ.get('EDITORIAL_MODEL_API_KEY') or os.environ.get('OPENAI_API_KEY')) or (Path(os.environ['CODEX_HOME'])/'auth.json').exists()
     result['codex_login']=dict(login_state)
     result['turbopush']=dict(desktop.turbo_status)
     return result
@@ -112,6 +113,9 @@ def start_worker():
         status['stage']='configure'
         subprocess.run([sys.executable,str(ROOT/'scripts/configure.py')],check=True,stdout=subprocess.DEVNULL)
         home=Path(os.environ['CODEX_HOME'])
+        if os.environ.get('EDITORIAL_MODEL_API_KEY'):
+            (home/'config.toml').write_text(provider_toml(os.environ['EDITORIAL_MODEL_BASE_URL'],os.environ['CODEX_MODEL']),encoding='utf-8')
+            (home/'config.toml').chmod(0o600)
         session_folder=ROOT/'cloud/sessions';session_folder.mkdir(parents=True,exist_ok=True)
         if not (home/'sessions').exists():(home/'sessions').symlink_to(session_folder,target_is_directory=True)
         restored_auth=store.secret('codex_auth')

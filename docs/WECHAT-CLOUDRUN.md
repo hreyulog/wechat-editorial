@@ -27,6 +27,14 @@ python scripts/cloud-status.py \
 
 凭证目录包含 appid.txt / appsecret.txt / botid.txt / qiyesecret.txt。私有部署回执含管理员密码和服务环境，不能提交、截图或回传原文。`--base-version editorial-...-NNN` 可复用同服务已构建的运行镜像，避免重建大依赖。构建完成不等于容器就绪，云 API finished 也不等于 Bot / Codex 已授权；检查 `/api/cloud/status` 的真实组件状态。
 
+模型也可通过 `--model-config-file /private/cloud-model.json` 显式配置支持 Responses API 的服务：
+
+```json
+{"base_url":"https://your-api.example/v1","model":"YOUR_MODEL","api_key":"YOUR_KEY"}
+```
+
+此文件不能提交仓库。部署器将密钥留在服务环境，生成的 Codex TOML 只引用密钥变量名；不读写桌面 Codex 登录缓存。云端设备登录当前实测返回 `device code request failed with status 403 Forbidden`，因此未取得设备登录码，模型授权与真实执行仍待补齐；不要把该错误归因于企业微信或 TurboPush。
+
 进入工作台“账号与连接”，按当前随机口令在目标企微群真正 @ 新 Bot 绑定，完成云端 Codex 授权并打开 TurboPush 登录目标账号。公众号 API 的新出口 IP 可能需要用户加入白名单。用新的真实企微消息验证制作、原会话送审、二维码图片、审批及平台草稿；不补发历史队列。
 
 下面保留最初的资源检查与验收清单。最终云端收发、视频制作/上传和重启恢复必须分别提供真实回执；源码适配或 Windows 成功不代替云端端到端验收。

@@ -100,6 +100,12 @@ def deploy(args):
         CODEX_TIMEOUT_SECONDS='14400',PORT='8080')
     if args.openai_key_file:
         params['OPENAI_API_KEY']=args.openai_key_file.read_text(encoding='utf-8-sig').strip()
+    if args.model_config_file:
+        import sys
+        sys.path.insert(0,str(ROOT))
+        from cloud.model_config import validate
+        model=validate(json.loads(args.model_config_file.read_text(encoding='utf-8-sig')))
+        params.update(EDITORIAL_MODEL_API_KEY=model['api_key'],EDITORIAL_MODEL_BASE_URL=model['base_url'],CODEX_MODEL=model['model'])
     private['env_params']=params
     receipt_path.write_text(json.dumps(private,indent=2),encoding='utf-8')
     client.action('UpdateServerBaseConfig',{'WxAppId':client.appid,'EnvId':env_id,'ServerName':service,
@@ -154,6 +160,7 @@ if __name__=='__main__':
     parser.add_argument('--env-id',required=True)
     parser.add_argument('--settings-source',default='express-ulck')
     parser.add_argument('--openai-key-file',type=Path)
+    parser.add_argument('--model-config-file',type=Path,help='Private JSON with base_url/model/api_key for a Responses API provider')
     parser.add_argument('--base-version',help='Reuse the verified runtime image of this same service; do not rebuild large unchanged dependencies')
     args=parser.parse_args()
     try:deploy(args)
