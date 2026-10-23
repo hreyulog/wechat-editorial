@@ -43,6 +43,23 @@ test('private delivery requires a known sender and the matching inbound receipt'
  assert(!eligible({...item,destination:{provider:'wecom',chatid:'stranger'}},binding,source));
 });
 
+test('a slow inbound acknowledgment cannot start a task before routing or steer the message into itself',async()=>{
+ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'wecom-slow-ack-')),root=path.join(temp,'bot'),studio=path.join(temp,'wechat-content-studio');
+ for(const folder of [path.join(root,'state'),path.join(studio,'state'),path.join(studio,'outbox')])fs.mkdirSync(folder,{recursive:true});
+ write(path.join(root,'state/binding.json'),binding);write(path.join(studio,'config.json'),{});
+ let release,runs=0,controls=0;const sends=[];
+ const worker=startProduction({root,botId:'bot',onError:e=>{throw e;},
+  client:{isConnected:true,replyStream:async()=>new Promise(resolve=>{release=()=>resolve({errcode:0});}),sendMessage:async(chat)=>{sends.push(chat);return{errcode:0};}},
+  runTask:async()=>{runs++;return{text:'done'};},controlTask:async()=>{controls++;return{accepted:true};}});
+ const pending=worker.handle({body:{chattype:'single',from:{userid:'owner'},msgid:'slow',text:{content:'make a new draft'}}});
+ try{
+  await new Promise(resolve=>setTimeout(resolve,3200));assert.equal(runs,0);assert.equal(controls,0);
+  release();await pending;
+  for(let i=0;i<100&&sends.length===0;i++)await new Promise(resolve=>setTimeout(resolve,20));
+  assert.equal(runs,1);assert.equal(controls,0);assert.deepEqual(sends,['owner']);
+ }finally{release?.();await pending;worker.stop();while(worker.isBusy())await new Promise(r=>setTimeout(r,10));fs.rmSync(temp,{recursive:true,force:true});}
+});
+
 test('private task queues separately and all its replies and MP4 stay in that private chat',async()=>{
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'wecom-conversation-')),root=path.join(temp,'bot'),studio=path.join(temp,'wechat-content-studio');
  for(const folder of [path.join(root,'state'),path.join(studio,'state'),path.join(studio,'outbox'),path.join(studio,'jobs/C0001/v1')])fs.mkdirSync(folder,{recursive:true});

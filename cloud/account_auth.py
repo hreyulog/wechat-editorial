@@ -1,6 +1,8 @@
 """Explicitly authorized ChatGPT cache transfer; credential values are never logged."""
 import json
 import re
+import socket
+import ssl
 
 
 def validate_cache(value):
@@ -30,3 +32,17 @@ def safe_failure(text, auth):
     value = re.sub(r'https?://\S+', '[endpoint]', value)
     value = re.sub(r'eyJ[A-Za-z0-9_.-]{20,}', '[REDACTED]', value)
     return value[-1200:]
+
+
+def account_network_probe():
+    """Unauthenticated DNS/TLS diagnosis; never sends account credentials."""
+    result={}
+    for host in ('chatgpt.com','auth.openai.com'):
+        stage='dns_or_tcp'
+        try:
+            with socket.create_connection((host,443),timeout=6) as raw:
+                stage='tls'
+                with ssl.create_default_context().wrap_socket(raw,server_hostname=host):pass
+            result[host]={'tls':'connected'}
+        except Exception as error:result[host]={'failed_stage':stage,'error_type':type(error).__name__}
+    return result

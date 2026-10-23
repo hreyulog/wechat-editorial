@@ -76,9 +76,10 @@ client.on('message.text',frame=>{void (async()=>{
  if(!bind){await worker.handle(frame);return;}
  const b=frame.body||{};
  if(b.chattype==='single'&&worker){await worker.handle(frame);return;}
- const match=/绑定审核群\s+([a-f0-9]{8})\s*$/u.exec(taskText(b.text?.content));
- if(b.chattype!=='group'||!b.chatid||!b.from?.userid||(b.aibotid&&b.aibotid!==botId)||match?.[1]!==phrase){
-  state.last_message={...state.last_message,binding_result:match?'challenge_mismatch':'binding_text_not_matched'};save();return;
+ const content=String(b.text?.content||'');
+ const hasKeyword=content.includes('绑定审核群'),hasChallenge=content.toLowerCase().includes(phrase);
+ if(b.chattype!=='group'||!b.chatid||!b.from?.userid||(b.aibotid&&b.aibotid!==botId)||!hasKeyword||!hasChallenge){
+  state.last_message={...state.last_message,binding_result:'binding_text_not_matched',has_binding_keyword:hasKeyword,has_challenge:hasChallenge,content_chars:content.length};save();return;
  }
  const approved={enabled:true,chatid:b.chatid,group_members:'all',private_messages:privateAll?'all':'known_members',private_user_ids:[b.from.userid],bot_id_sha256:crypto.createHash('sha256').update(botId).digest('hex'),activated_at:binding?.activated_at||new Date().toISOString(),historical_backlog_enabled:false};
  if(binding)Object.assign(binding,approved);else binding=approved;

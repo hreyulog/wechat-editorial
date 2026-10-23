@@ -76,7 +76,7 @@ export function startProduction({client,botId,root,onError,runTask,controlTask,b
  const save=()=>write(statusPath,{...status,updated_at:now()});save();
  // In-flight work after a crash has an unknown outcome: never execute or send it twice.
  for(const name of fs.readdirSync(inbox).filter(n=>n.endsWith('.json'))){const p=path.join(inbox,name),v=read(p);
-  if(['running','replying'].includes(v.status)){v.status='outcome_unknown';write(p,v);}}
+  if(['received','running','replying'].includes(v.status)){v.status='outcome_unknown';write(p,v);}}
  const outbox=path.join(studio,'outbox');
  const sourceOf=item=>{if(!item.source_message_id)return undefined;const p=path.join(inbox,digest(item.source_message_id)+'.json');return fs.existsSync(p)?read(p):undefined;};
  for(const name of fs.readdirSync(outbox).filter(n=>n.endsWith('.json'))){const p=path.join(outbox,name),v=read(p);
@@ -179,7 +179,9 @@ export function startProduction({client,botId,root,onError,runTask,controlTask,b
   if(body.chattype==='group')knownMembers.add(body.from.userid);
   const text=taskText(body.text?.content);if(!text)return true;
   const p=path.join(inbox,digest(body.msgid)+'.json');if(fs.existsSync(p))return true;
-  write(p,{msgid:body.msgid,user_id:body.from.userid,chatid:body.chatid,chattype:body.chattype,text,received_at:now(),status:'queued'});
+  // Keep the record off the worker queue until acknowledgment and control routing finish.
+  // A slow official ACK used to let the interval start this message, then steer it into itself.
+  write(p,{msgid:body.msgid,user_id:body.from.userid,chatid:body.chatid,chattype:body.chattype,text,received_at:now(),status:'received'});
   // Only acknowledge a new real user task, never on startup or configuration changes.
   try{ack(await client.replyStream(frame,'task_'+crypto.randomUUID(),'收到，处理中',true));}catch(e){onError(e,'task_ack');}
   if(/^(?:进度\s+C\d{4,}|任务列表)\s*$/.test(text)){
@@ -193,13 +195,13 @@ export function startProduction({client,botId,root,onError,runTask,controlTask,b
    }catch(error){record.status='outcome_unknown';record.error=errorDetails(error);write(p,record);onError(error,'status_reply');}
    return true;
   }
-  const record=read(p),targetRecord=activeRecord&&replyTarget(activeRecord.v,binding)===replyTarget(record,binding)?activeRecord:undefined;
+  const record=read(p),targetRecord=activeRecord&&activeRecord.v.msgid!==record.msgid&&replyTarget(activeRecord.v,binding)===replyTarget(record,binding)?activeRecord:undefined;
   try{
    const handled=await applyIncomingControl({record,target:targetRecord?.v,
     control:options=>{if(!controlTask)throw Error('Native task control is unavailable');return controlTask({...options,targetMessageId:targetRecord?.v.msgid});},
     persist:()=>write(p,record),persistTarget:()=>{if(targetRecord)write(targetRecord.p,targetRecord.v);},push:text=>push(text,replyTarget(record,binding))});
    if(handled)return true;
   }catch(error){onError(error,'task_control');await push('当前控制请求的结果不明，已保留记录，不会自动重复执行。',replyTarget(record,binding));return true;}
-  void processInbox();return true;
+  record.status='queued';write(p,record);void processInbox();return true;
  }};
 }

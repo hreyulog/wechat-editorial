@@ -15,7 +15,7 @@ from pathlib import Path
 from cloud.store import ROOT, Store
 from cloud import desktop
 from cloud.model_config import provider_toml
-from cloud.account_auth import validate_cache, validate_model, safe_failure
+from cloud.account_auth import validate_cache, validate_model, safe_failure, account_network_probe
 
 os.environ['EDITORIAL_CLOUD']='1'
 os.environ['EDITORIAL_LOCAL_TOKEN']=secrets.token_urlsafe(32)
@@ -31,6 +31,8 @@ auth_check={'phase':'not_started'}
 
 
 def model_busy():
+    production=bot/'state/production.json'
+    if production.exists() and json.loads(production.read_text()).get('phase')=='processing':return True
     for path in (bot/'state/inbox').glob('*.json'):
         if json.loads(path.read_text(encoding='utf-8')).get('status') in ('running','replying'):
             return True
@@ -52,6 +54,8 @@ def import_account_auth(data):
         temp.write_bytes(raw);temp.chmod(0o600);temp.replace(target)
         if model:
             store.secret('codex_account_model',model.encode());os.environ['CODEX_MODEL']=model
+            (home/'config.toml').write_text('model = '+json.dumps(model)+'\n',encoding='utf-8')
+            (home/'config.toml').chmod(0o600)
         login_state.clear();login_state.update(phase='authenticated',method='operator_import')
         auth_check.clear();auth_check.update(phase='not_started')
     return {'phase':'authenticated','method':'operator_import','model':model}
@@ -67,7 +71,9 @@ def check_account_auth():
         auth=json.loads(target.read_text());validate_cache(auth)
         auth_check.clear();auth_check.update(phase='checking')
         def run():
+            network={}
             try:
+                network=account_network_probe();auth_check['network']=network
                 args=['codex','exec','--skip-git-repo-check','--sandbox','read-only','--ephemeral',
                     '-c','approval_policy="never"','--json']
                 if os.environ.get('CODEX_MODEL'):args+=['--model',os.environ['CODEX_MODEL']]
@@ -80,10 +86,12 @@ def check_account_auth():
                         if item.get('type')=='agent_message' and item.get('text','').strip()=='CLOUD_CODEX_OK':success=True
                     except (ValueError,TypeError):pass
                 auth_check.clear();auth_check.update(phase='verified' if result.returncode==0 and success else 'failed',exit_code=result.returncode)
+                auth_check['network']=network
                 if auth_check['phase']=='failed':auth_check['error']=safe_failure(result.stderr+'\n'+result.stdout,auth)
                 store.secret('codex_auth',target.read_bytes())
-            except subprocess.TimeoutExpired:
-                auth_check.clear();auth_check.update(phase='failed',error='Model authentication check timed out after 90 seconds')
+            except subprocess.TimeoutExpired as error:
+                details='\n'.join(v.decode(errors='replace') if isinstance(v,bytes) else v or '' for v in (error.stderr,error.stdout))
+                auth_check.clear();auth_check.update(phase='failed',error='Model authentication check timed out after 90 seconds',details=safe_failure(details,auth),network=network)
             except Exception as error:
                 auth_check.clear();auth_check.update(phase='failed',error_type=type(error).__name__)
         threading.Thread(target=run,daemon=True).start()
@@ -193,7 +201,10 @@ def start_worker():
         if restored_auth:
             (home/'auth.json').write_bytes(restored_auth);(home/'auth.json').chmod(0o600)
             model=store.secret('codex_account_model')
-            if model:os.environ['CODEX_MODEL']=validate_model(model.decode())
+            if model:
+                os.environ['CODEX_MODEL']=validate_model(model.decode())
+                (home/'config.toml').write_text('model = '+json.dumps(os.environ['CODEX_MODEL'])+'\n',encoding='utf-8')
+                (home/'config.toml').chmod(0o600)
         desktop.start(store)
         # Credentials are never bundled; explicit account import uses the private admin API.
         if os.environ.get('OPENAI_API_KEY'):
