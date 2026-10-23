@@ -4,6 +4,8 @@
 
 ## 1. 系统依赖
 
+仅查看运营工作台可先执行 `python3 editorial/workbench/server.py`，不需机器人凭证或下文完整安装。通过 SSH `-L 8788:127.0.0.1:8788` 从本机访问；生产服务目录可用 --studio / --bot 指定，详见 [工作台说明](WORKBENCH.md)。以下步骤安装完整内容制作能力。
+
 建议 Ubuntu 24.04 / Debian 12 或更新的 x86_64 Linux，Node.js 22+、npm、Python 3.11+、FFmpeg 和中文字体。Node.js 可使用你已有安装；安装后确认 PATH 包含 node/npm。
 
 ```bash

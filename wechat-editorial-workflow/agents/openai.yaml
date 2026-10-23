@@ -1,4 +1,4 @@
 interface:
-  display_name: "微信内容制作与送审"
-  short_description: "文章与视频制作、公众号官方草稿、企业微信群审核"
+  display_name: "自媒体运营与送审"
+  short_description: "选题排期、文章视频制作、公众号与视频号草稿、企业微信审核"
   default_prompt: "使用 wechat-editorial-workflow，读取本仓库工作室说明，制作实际文章或视频并送审；保留真实回执，不自动公开发布。"

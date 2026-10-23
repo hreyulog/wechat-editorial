@@ -16,5 +16,6 @@ editorial/wechat-content-studio/jobs/
 editorial/wechat-content-studio/outbox/
 editorial/wechat-content-studio/state/
 editorial/wecom-bot-local/state/
+editorial/workbench/state/
 editorial/upstream/**/aws.env
 editorial/upstream/**/.aws-article/

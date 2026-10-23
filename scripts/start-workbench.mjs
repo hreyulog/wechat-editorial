@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {spawn} from 'node:child_process';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const local=path.join(root,'.venv',process.platform==='win32'?'Scripts/python.exe':'bin/python');
+const python=process.env.WORKBENCH_PYTHON||(fs.existsSync(local)?local:process.platform==='win32'?'python':'python3');
+const child=spawn(python,['-X','utf8',path.join(root,'editorial/workbench/server.py'),...process.argv.slice(2)],{stdio:'inherit',windowsHide:true});
+child.on('error',()=>{console.error('无法启动 Python。请配置 WORKBENCH_PYTHON，或使用 python editorial/workbench/server.py。');process.exitCode=1;});
+child.on('exit',code=>{process.exitCode=code??1;});
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>child.kill(signal));

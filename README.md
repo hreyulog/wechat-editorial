@@ -1,55 +1,110 @@
-# wechat-editorial
+# 自媒体运营管理工作台
 
-在企业微信群 @ 机器人发任务，或由已确认的群成员私聊机器人，由 Codex 制作公众号文章和视频。**进度、公众号官方草稿预览链接和 MP4 文件附件全部回到消息来源：私聊回本人，群消息回原群。**
+**从选题、文章和视频制作，到审核、平台草稿，集中管理微信公众号与视频号的内容运营。**
 
-指定群里的所有成员都可以 @ 使用。收到任务立即回复“收到，处理中”；制作结果排队发送。视频先发送 MP4 文件、实际视频名、完整简介和目标账号，用户看完回复 `OK C编号-vN` 后才上传视频号草稿箱，并返回具体文案和实际上传结果；OK 不授权公开发布。公众号审核仍只记录审核。
+项目名保留 `wechat-editorial`。企业微信是日常任务入口，Codex 与 Skill 负责制作，工作台负责查看全局进度、版本素材、审核和运营排期。继续支持“一句话发任务”，所有制作进度与成品回到原会话：私聊回本人，群消息回原群。
 
-制作中转发简短阶段说明。需要选音色、方向或试听确认时先问、等下一条回复。执行中的普通补充通过 Codex 原生 turn/steer 进入当前任务；“停止”调用 turn/interrupt；“打断：新要求”停止后优先续做；另一个选题写“新任务：……”才排队。
+## 工作台里能做什么
 
-## Linux 部署
+| 模块 | 当前能力 |
+|---|---|
+| 运营总览 | 内容数量、制作进度、待审核、已有草稿、连接状态 |
+| 内容看板 | 搜索与筛选真实任务，查看历史版本、素材、完整标题与简介 |
+| 审核中心 | 播放 / 下载 MP4，打开公众号官方预览，复制对应版本的审核或修改指令 |
+| 选题与排期 | 新建选题，记录负责人、日期、目标平台、制作要求，关联已有内容并归档 |
+| 账号与连接 | 展示企业微信心跳、执行器状态、公众号检查记录与 TurboPush MCP 配置状态 |
 
-先读 [Linux 安装与迁移说明](docs/LINUX.md)。需要 Node.js 22+、Python 3.11+、FFmpeg、中文字体、Codex CLI 和自己的企业微信 Bot 凭证；公众号草稿还需开发接口权限与出口 IP 白名单。
+数据来自真实任务目录与回执，首次启动没有演示内容。保存选题后可复制企业微信任务交给机器人制作；排期只作运营计划，不会触发自动发布。审核仍在原企业微信会话完成，页面不代替真实用户确认。
+
+```mermaid
+flowchart LR
+  P[工作台 · 选题与排期] -->|复制任务| W[企业微信 · 群内 @ / 私聊]
+  W --> C[Codex + 内容 Skill]
+  C --> M[文章 / 视频 / 版本与素材]
+  M --> R[原会话送审]
+  R -->|确认视频版本| D[视频号草稿箱]
+  M --> A[公众号官方草稿预览]
+  M --> V[工作台 · 看板与审核中心]
+  D --> V
+  A --> V
+```
+
+## 打开本地工作台
+
+界面与服务只用 Python 标准库；单独查看工作台不需要安装 Node 依赖、配置密钥或启动机器人。
 
 ```bash
 git clone https://github.com/hreyulog/wechat-editorial.git
 cd wechat-editorial
-bash scripts/setup-linux.sh
-# 编辑 .env；以同一 Linux 用户配置并登录 Codex CLI
-# 停止旧机器上同一个 Bot 的实例后：
-npm run bind
-npm run bot
+python3 editorial/workbench/server.py
 ```
 
-`bind` 会要求在目标群 @ Bot 发送随机口令，然后仅保存该群绑定。启动不发样例、不补发历史稿件。迁移包和仓库不含密钥、账号/登录状态、聊天或历史文章视频；目标机器单独配置。依赖需要联网安装。
+打开 **http://127.0.0.1:8788**。Windows 使用 `python`；已配置 Node / Python 环境时也可 `npm run workbench`。已有制作实例可以单独指定数据目录：
 
-**本次按用户要求未运行 Linux 安装、启动、功能测试或群收发验收。** Linux 版是可部署源码与安装入口，运行结果由目标环境确认；旧 Windows 流程的成功回执不能作为 Linux 验收结果。
+```bash
+python3 editorial/workbench/server.py --studio /path/to/wechat-content-studio --bot /path/to/wecom-bot-local
+```
 
-## 包含的 Skill 与流程
+选题与排期独立保存在被 Git 忽略的 `editorial/workbench/state/`，不会改动旧实例的 jobs、outbox、审核记录或聊天状态。完整操作见 [工作台说明](docs/WORKBENCH.md)。远程 Linux 可通过 SSH 本地端口转发查看。
 
-| 入口 | 用途 |
+## 一句话制作与送审
+
+在指定企业微信群真正 @ 机器人，或由已确认的群成员私聊：
+
+```text
+做一期马尔可夫人物视频，沿用切比雪夫的风格，再配一篇公众号文章。
+进度 C0001
+修改 C0001：开头更直接，保留原配音。
+OK C0001-v2
+```
+
+机器人立即回复“收到，处理中”，关键阶段持续回报进度；需要选方向或试听确认时先问、等下一条回复。同一会话的补充即时进入当前任务，“停止”中断，“新任务：……”进入队列。
+
+视频先发 **MP4 文件附件、实际视频名、完整简介、目标账号和版本**。你看完确认后才上传对应视频号草稿，并返回实际回执。公众号文章发送真实官方草稿预览。OK 只授权视频草稿上传；公开发表需要另行明确授权，当前流程不自动执行。
+
+视频号作品原生卡片可自动插入文章，前提是取得该作品真实 `export_id` 与账号字段，并经官方读回核验；新作品 ID 的自动获取尚未完整打通，详见 [文章视频组件](docs/ARTICLE-VIDEO.md)。
+
+## 部署完整制作流程
+
+需要 Node.js 22+、Python 3.11+、FFmpeg、中文字体、Codex CLI 和自己的企业微信 Bot 凭证；公众号草稿另需开发接口权限与出口 IP 白名单。
+
+```bash
+bash scripts/setup-linux.sh
+# 配置 .env，并用运行机器人同一个用户登录 Codex CLI
+# 停止旧机器上同一个 Bot 实例，再绑定：
+npm run bind
+npm run bot
+# 另开终端：
+npm run workbench
+```
+
+详见 [Linux 部署](docs/LINUX.md)。单个 Bot 保持一个长连接实例；启动不会发送样例或补发历史稿件。Linux 执行路径不依赖桌面微信或 codex-weixin 网页服务。TurboPush 是可选 MCP 集成，提供实际 21 个工具，含 `publish_video`；已配置与真实上传结果分别展示。
+
+**已在 Windows 检查新增工作台及已有核心测试；未在 Linux 实机运行验证。** 工作机历史成功记录不替代迁移环境验收。
+
+## 仓库结构与 Skill
+
+| 路径 | 职责 |
 |---|---|
-| [wechat-editorial-workflow](wechat-editorial-workflow/SKILL.md) | 群聊/私聊任务、文章与视频、官方草稿、原会话送审、修改与审核 |
-| [math-explainer-animation](math-explainer-animation/SKILL.md) | 数学知识动画，Remotion / React / TypeScript / SVG |
-| [st-petersburg-math-documentary](st-petersburg-math-documentary/SKILL.md) | 人物纪录片、中文配音、中英字幕与真实媒体核对 |
-| [工作室说明](editorial/wechat-content-studio/AGENTS.md) | 实际文件格式、版本、构建、草稿及发送命令 |
+| [editorial/workbench](editorial/workbench/server.py) | 本地运营管理界面、真实状态聚合、独立选题排期 |
+| [editorial/wecom-bot-local](editorial/wecom-bot-local/bridge.mjs) | 企业微信接入、持久队列、原生 Codex 会话、即时控制与媒体发送 |
+| [editorial/wechat-content-studio](editorial/wechat-content-studio/AGENTS.md) | 内容版本、构建、检查、公众号草稿、视频号集成 |
+| [wechat-editorial-workflow](wechat-editorial-workflow/SKILL.md) | 运营、制作与审核协作流程 |
+| [math-explainer-animation](math-explainer-animation/SKILL.md) | Remotion / SVG 数学知识动画 |
+| [st-petersburg-math-documentary](st-petersburg-math-documentary/SKILL.md) | 人物纪录片、中文配音、双语字幕与系列风格 |
 
-文章排版与草稿构造复用固定版本上游代码，调用仅限官方草稿端点。MP4 通过官方 file 类型上传并发送为带文件名的附件，可下载保存；较大的视频自动生成完整时长的小审片副本，保留原片及哈希。文本已发送而附件失败时不会重复文章；执行/发送结果不明时暂停该条，避免重复副作用。
+制作由对应 Skill 按用户选题进行研究、写稿和渲染。迁移版本保留明确的内容分工，未宣称自动并行多 Agent 调度。文章排版与草稿构造复用固定版本上游子集，来源及授权见 [NOTICE](NOTICE.md)。
 
-Linux 企业微信路径使用本机 Codex CLI 的 app-server 原生会话协议，不依赖桌面 WeChat 或 codex-weixin 网页服务。一个进程持续拥有会话，避免每次控制另启执行器。TurboPush 支持可选本地内容库适配器及[显式 MCP 接入](docs/TURBOPUSH-MCP.md)，默认关闭；配置后提供与工作机一致的 21 个工具，含 `publish_video`。工具接入与真实上传结果分别核验，Linux 上传和发布尚未实机验证。
+## 文档与迁移包
 
-## 文档与导出
-
-视频文件送审、文案绑定、确认上传与结果字段见 [视频审核后上传草稿](docs/VIDEO-REVIEW.md)。不再要求视频号手机预览二维码。
-
-- [Linux 部署、切换、常驻服务与验收入口](docs/LINUX.md)
-- [架构、状态、故障与能力边界](docs/WORKFLOW.md)
-- [原有视频 Skill 详细说明](docs/VIDEO-SKILLS.md)
-- [第三方来源与许可](NOTICE.md)
-
-从已提交的干净源码生成迁移包：
+- [工作台启动、数据与使用](docs/WORKBENCH.md)
+- [架构、状态与故障处理](docs/WORKFLOW.md)
+- [视频审片、确认与草稿上传](docs/VIDEO-REVIEW.md)
+- [TurboPush MCP 接入](docs/TURBOPUSH-MCP.md)
+- [视频 Skill 与风格](docs/VIDEO-SKILLS.md)
 
 ```bash
 python3 scripts/export-migration.py --output ./dist
 ```
 
-输出 tar.gz、ZIP、SHA256 和文件清单，绑定源码提交。只归档 Git 中的源文件，不遍历运行状态、私钥或本机依赖。不要把 `.env`、state、jobs、outbox、node_modules 或虚拟环境提交到 Git。
+从已提交的干净源码生成 tar.gz、ZIP、SHA256 与文件清单。归档只包含 Git 受控源文件，排除 `.env`、凭证、账号缓存、聊天、选题排期、历史稿件、视频、state、jobs、outbox、依赖与虚拟环境。目标机器独立配置账号，不直接迁移工作机登录状态。

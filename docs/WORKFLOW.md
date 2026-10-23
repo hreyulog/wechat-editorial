@@ -1,4 +1,6 @@
-# 工作流与运维
+# 自媒体运营工作台：架构与运维
+
+工作台 UI 在 `editorial/workbench`，用真实任务与回执呈现运营总览、内容看板、审核、选题排期和连接状态，启动与操作见 [工作台说明](WORKBENCH.md)。企业微信仍是任务与审核入口；本地管理界面只写独立运营计划，不修改机器人入站或出站队列。
 
 ```mermaid
 flowchart LR
@@ -22,6 +24,7 @@ flowchart LR
 
 | 目录 | 内容 |
 |---|---|
+| `editorial/workbench` | 本地运营界面、状态聚合、版本素材与独立选题排期 |
 | `editorial/wecom-bot-local` | 官方 Bot、群绑定、任务队列、Codex app-server、即时控制、媒体压缩 |
 | `editorial/wechat-content-studio` | 版本管理、Remotion/排版、草稿接口、审核、可选 TurboPush 本地库 |
 | `wechat-editorial-workflow` | 全流程 Skill |

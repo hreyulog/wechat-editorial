@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>自媒体运营管理工作台 · Editorial</title>
+  <link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#overview"><span class="brand-icon">E</span><span>EDITORIAL<small>自媒体运营工作台</small></span></a>
+    <div class="workspace"><span class="workspace-icon">自</span><span>内容运营空间<small>微信公众号 · 视频号</small></span><span class="workspace-dot"></span></div>
+    <div class="nav-label">工作空间</div>
+    <nav aria-label="工作台导航">
+      <a href="#overview" data-view="overview"><span>◈</span>运营总览</a>
+      <a href="#content" data-view="content"><span>▤</span>内容看板<span id="nav-total" class="nav-count">—</span></a>
+      <a href="#review" data-view="review"><span>◇</span>审核中心<span id="nav-review" class="nav-count">—</span></a>
+      <a href="#calendar" data-view="calendar"><span>▦</span>选题与排期</a>
+      <a href="#integrations" data-view="integrations"><span>⌘</span>账号与连接</a>
+    </nav>
+    <div class="sidebar-bottom"><span class="mini-dot"></span>本机工作空间<small>企业微信下任务 · 工作台看全局</small></div>
+  </aside>
+  <main>
+    <header class="topbar"><span id="breadcrumb">工作空间 / 运营总览</span><div><span id="sync-status">读取工作室数据…</span><button id="refresh" class="icon-button" title="刷新数据" aria-label="刷新数据">↻</button></div></header>
+    <div class="page">
+      <section class="page-heading"><div><div class="eyebrow">YOUR CONTENT, IN MOTION</div><h1 id="page-title">运营总览</h1><p id="page-subtitle">从一个选题，到一份值得发布的内容。</p></div><button class="primary" id="new-plan">＋ 新建选题</button></section>
+      <div id="error-banner" class="error-banner" role="alert" hidden></div>
+      <div id="app" aria-live="polite"><div class="empty">正在连接本地内容工作室…</div></div>
+      <footer>内容制作 → 审核 → 平台草稿 <span>公开发布需要独立授权</span></footer>
+    </div>
+  </main>
+  <dialog id="task-dialog" class="task-dialog"><div class="dialog-top"><span>内容详情</span><button class="icon-button" data-close="task-dialog" aria-label="关闭内容详情">×</button></div><div id="task-detail"></div></dialog>
+  <dialog id="plan-dialog" class="plan-dialog"><div class="dialog-top"><span id="plan-dialog-title">新建选题</span><button class="icon-button" data-close="plan-dialog" aria-label="关闭选题">×</button></div>
+    <form id="plan-form">
+      <label>选题名称<input name="topic" required maxlength="200" placeholder="例如：马尔可夫的人物故事"></label>
+      <div class="form-grid"><label>内容形式<select name="kind"><option value="both">文章 + 视频</option><option value="article">公众号文章</option><option value="video">视频</option></select></label><label>目标平台<select name="channel"><option value="both">公众号 + 视频号</option><option value="wechat">微信公众号</option><option value="channels">视频号</option></select></label></div>
+      <div class="form-grid"><label>计划日期<input name="date" type="date"></label><label>负责人<input name="owner" maxlength="80" placeholder="待分配"></label></div>
+      <label>关联已有内容<select name="job_id"><option value="">暂不关联</option></select></label>
+      <label>制作要求 / 运营备注<textarea name="notes" rows="4" maxlength="4000" placeholder="叙事方向、风格参考、时长、目标受众…"></textarea></label>
+      <label class="checkbox-label"><input name="archived" type="checkbox">归档此选题</label>
+      <p class="form-note">保存选题用于运营排期。点击“复制企微任务”后，在企业微信发给机器人开始制作；排期日期不会触发自动发布。</p>
+      <div id="plan-error" class="form-error" role="alert"></div><div class="form-actions"><button class="secondary" type="button" id="copy-plan">复制企微任务</button><button class="primary" type="submit">保存选题</button></div>
+    </form>
+  </dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
