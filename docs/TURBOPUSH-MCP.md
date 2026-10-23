@@ -29,6 +29,8 @@
 
 视频上传使用 MCP 的 `publish_video`，本地适配器 `turbopush_local.py` 仍只负责入库。调用应核对版本文件及目标账号，区分 `syncDraft:true` 保存草稿和 `syncDraft:false` 公开发布。执行后通过 `list_records` / `get_record_info` 核对对应账号、记录 ID 和实际状态；超时或结果不明不得自动重发。
 
+用户要求小红书默认只上传草稿：小红书视频用 `publish_video`、图文用 `publish_graph_text`，明确传 `syncDraft:true`（MCP 的默认值是 false，不能省略）。“发一下/同步一下”按草稿处理；当次明确确认公开发布并核对版本才可 `syncDraft:false`。接口确实暴露草稿参数，平台草稿的实际落地仍以本次真实记录为准；不支持就停止，不改成公开、自己可见或定时发表，不重传历史记录。
+
 ## 原 Windows codex-weixin 实例
 
 codex-weixin 0.3.14 默认隔离全局 MCP，单纯修改桌面 Codex 配置不会让机器人继承。可对该固定版本安装显式适配器：
