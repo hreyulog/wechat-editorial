@@ -5,6 +5,7 @@ import {spawn} from 'node:child_process';
 import {write} from './production.mjs';
 import {turbopushCodexArgs} from './turbopush-mcp.mjs';
 import {editorialTurnTimeoutMs} from './runtime-recovery.mjs';
+import {cloudCall} from '../../cloud/client.mjs';
 
 // One native Codex app-server owns the thread; new input can steer the active turn.
 export function createCodexRunner({studio,stateDir,repository}){
@@ -24,7 +25,7 @@ export function createCodexRunner({studio,stateDir,repository}){
   if(!target.completion||!target.started)return;await target.chain;
   if(active!==target)return;active=undefined;clearTimeout(target.timer);
   const turn=target.completion;
-  if(turn.status==='completed'){target.resolve({text:target.text||'本轮已完成。',threadId:target.threadId});return;}
+  if(turn.status==='completed'){cloudCall('checkpoint');target.resolve({text:target.text||'本轮已完成。',threadId:target.threadId});return;}
   const error=Error(turn.status==='interrupted'?'Codex app-server turn was interrupted':turn.error?.message||'Codex turn failed');
   if(turn.status==='interrupted')error.code='CODEX_TURN_INTERRUPTED';target.reject(error);
  };

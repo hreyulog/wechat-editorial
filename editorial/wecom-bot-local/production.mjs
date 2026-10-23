@@ -4,11 +4,18 @@ import crypto from 'node:crypto';
 import {handleContentMessage} from '../wechat-content-studio/router.mjs';
 import {reviewMedia} from './review-media.mjs';
 import {applyIncomingControl} from './interrupt.mjs';
+import {cloudCall} from '../../cloud/client.mjs';
+import {validatePublicationQr} from './publication-qr.mjs';
+import {EDITORIAL_EXECUTION_POLICY} from './editorial-policy.mjs';
+import {validatePreviewQr,previewQrParent} from './article-preview-qr.mjs';
 
 const read=p=>JSON.parse(fs.readFileSync(p,'utf8').replace(/^\uFEFF/,''));
 const now=()=>new Date().toISOString();
 const digest=b=>crypto.createHash('sha256').update(b).digest('hex');
-export function write(p,v){const t=p+'.'+crypto.randomUUID()+'.tmp';fs.writeFileSync(t,JSON.stringify(v,null,2));fs.renameSync(t,p);}
+export function write(p,v){
+ if(process.env.EDITORIAL_CLOUD&&!cloudCall('write',{path:path.resolve(p),data:v}).local_only)return;
+ const t=p+'.'+crypto.randomUUID()+'.tmp';fs.writeFileSync(t,JSON.stringify(v,null,2));fs.renameSync(t,p);
+}
 export function authorized(body,binding,botId,knownMembers=new Set()){
  if(binding.enabled!==true||(body.aibotid&&body.aibotid!==botId)||!body.from?.userid||!body.msgid)return false;
  if(body.chattype==='single')return binding.private_messages==='known_members'
@@ -95,7 +102,7 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
      if(!direct||direct.draft_request){
       const prompt=(v.chattype==='single'?'来自已确认群成员的企业微信私聊任务。':'来自已授权企业微信群成员 @ 机器人的用户任务。')+'消息凭据 wecom:'+v.msgid+'；发起人 '+v.user_id+'。先读工作区 AGENTS.md。进度、最终答复、文章链接和视频附件全部回到本条消息的来源会话；私聊回本人，群消息回原群，不跨会话发送。关键阶段使用简短 commentary 给用户说明正在处理什么；这些内容会实时转发到来源会话。需要用户选方向、音色或试听确认时，先给真实小样或关键问题，在最终回复中明确等待选择后停止，收到下一条回复再继续，不要擅自全部做完才问。成品用 studio.py deliver，出站目的地由当前入站消息决定，禁止手动改成审核群、旧微信群或自动公开发布。只处理本条新任务，不补发历史稿件。\n\n'+v.text+(v.recovery_note?'\n\n本次人工恢复说明（保留原始用户任务）：'+v.recovery_note:'');
       if(!runTask)throw Error('Codex runner is not configured');
-      const result=await runTask(prompt+draftInstruction,{messageId:v.msgid,onProgress:async text=>{
+      const result=await runTask(prompt+draftInstruction+EDITORIAL_EXECUTION_POLICY,{messageId:v.msgid,onProgress:async text=>{
        v.progress=v.progress||[];const prior=v.progress.find(s=>s.text===text);if(prior)return prior.status==='sent';
        const progress={text,status:'sending',at:now()};v.progress.push(progress);write(p,v);
        try{await push(text,replyTarget(v,binding));progress.status='sent';progress.sent_at=now();}catch(error){progress.status='delivery_unknown';onError(error,'progress_delivery');}
@@ -132,7 +139,12 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
   if(sending||!client.isConnected)return;sending=true;
   try{for(const name of fs.readdirSync(outbox).filter(n=>n.endsWith('.json')).sort()){
    const p=path.join(outbox,name),v=read(p);if(!eligible(v,binding,sourceOf(v),knownMembers))continue;
-   let files;try{files=validateFiles(v,studio);validateVideoReview(v,studio);}catch(error){v.status='failed';v.error=error.message;write(p,v);continue;}
+   let files;try{
+    if(v.kind==='article_preview_qr'&&previewQrParent(v,studio).status!=='sent')continue;
+    if(v.kind==='publication_qr')files=validatePublicationQr(v,studio,sourceOf(v));
+    else if(v.kind==='article_preview_qr')files=validatePreviewQr(v,studio,sourceOf(v));
+    else{files=validateFiles(v,studio);validateVideoReview(v,studio);}
+   }catch(error){v.status=error.code==='QR_EXPIRED'?'expired':'failed';v.error=error.message;write(p,v);continue;}
    const cancelled=()=>{if(!v.source_message_id)return false;const source=path.join(inbox,digest(v.source_message_id)+'.json');return fs.existsSync(source)&&!!read(source).interrupt_requested_by;};
    if(cancelled()){v.status='cancelled';write(p,v);continue;}
    v.status='sending';v.steps=v.steps||[];write(p,v);
@@ -143,16 +155,19 @@ export function startProduction({client,botId,root,onError,runTask,controlTask})
     for(let i=0;i<files.length;i++){
      if(v.steps.some(s=>s.step==='file:'+i&&s.errcode===0))continue;
      v.stage='preparing_media';write(p,v);
-     const media=await reviewMedia(files[i],process.env.FFMPEG_BINARY||read(path.join(studio,'config.json')).ffmpeg);
-     v.delivery_media={path:media.path,sha256:digest(media.bytes),bytes:media.bytes.length,media_type:'file',filename:media.filename};write(p,v);
+     const media=['publication_qr','article_preview_qr'].includes(v.kind)?files[i]:await reviewMedia(files[i],process.env.FFMPEG_BINARY||read(path.join(studio,'config.json')).ffmpeg);
+     const mediaType=media.media_type||'file';
+     v.delivery_media={path:media.path,sha256:digest(media.bytes),bytes:media.bytes.length,media_type:mediaType,filename:media.filename};write(p,v);
      v.stage='uploading';v.active_file=i;write(p,v);
-     const upload=await client.uploadMedia(media.bytes,{type:'file',filename:media.filename});
+     const upload=await client.uploadMedia(media.bytes,{type:mediaType,filename:media.filename});
      if(!upload.media_id)throw Error('File upload returned no media ID');
-     v.steps.push({step:'upload:'+i,media_id:upload.media_id,media_type:'file',at:now()});write(p,v);
+     v.steps.push({step:'upload:'+i,media_id:upload.media_id,media_type:mediaType,at:now()});write(p,v);
      if(cancelled()){const e=new Error('Delivery cancelled by user interruption');e.code='DELIVERY_CANCELLED';throw e;}
+     if(v.kind==='publication_qr')validatePublicationQr(v,studio,sourceOf(v));
+     if(v.kind==='article_preview_qr')validatePreviewQr(v,studio,sourceOf(v));
      v.stage='sending_file';write(p,v);
-     ack(await client.sendMediaMessage(v.destination.chatid,'file',upload.media_id));
-     v.steps.push({step:'file:'+i,media_type:'file',filename:media.filename,errcode:0,at:now()});write(p,v);
+     ack(await client.sendMediaMessage(v.destination.chatid,mediaType,upload.media_id));
+     v.steps.push({step:'file:'+i,media_type:mediaType,filename:media.filename,errcode:0,at:now()});write(p,v);
     }
     v.status='sent';v.stage='completed';v.sent_at=now();v.recipient_confirmation='pending';write(p,v);
    }catch(error){v.status=error.code==='DELIVERY_CANCELLED'?'cancelled':['uploading','preparing_media'].includes(v.stage)?'upload_failed':'delivery_unknown';v.error=errorDetails(error);v.failed_at=now();write(p,v);onError(error,'production_delivery');}

@@ -23,6 +23,11 @@ for directory in ('jobs', 'outbox', 'state'):
 def now(): return datetime.now(timezone.utc).isoformat()
 def read(path): return json.loads(path.read_text(encoding='utf-8-sig'))
 def write(path, data):
+    if os.environ.get('EDITORIAL_CLOUD'):
+        sys.path.insert(0, str(ROOT.parents[1]))
+        from cloud.client import persist
+        persist(path, data)
+        return
     temporary = path.with_suffix('.' + uuid.uuid4().hex + '.tmp')
     temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
     os.replace(temporary, path)
@@ -258,6 +263,9 @@ def deliver(job_id, version=None):
                      'review_video_sha256': manifest['outputs'].get('review.mp4'),
                      'status': 'queued', 'created_at': now(), 'steps': []})
     if job['kind'] == 'video' or official.exists(): set_status(job, 'awaiting_review')
+    if job['kind'] != 'video' and official.exists() and destination.get('provider')=='wecom' and source.get('msgid'):
+        from article_preview_qr import enqueue
+        enqueue(ROOT,folder,path)
     return {'job_id': job_id, 'version': number, 'status': job['status'], 'outbox': str(path), 'delivery': read(path)['status']}
 
 

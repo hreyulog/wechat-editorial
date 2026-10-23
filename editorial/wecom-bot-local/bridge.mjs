@@ -5,6 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {WSClient} from '@wecom/aibot-node-sdk';
 import {startProduction,errorDetails,write,taskText} from './production.mjs';
 import {createCodexRunner} from './codex-runner.mjs';
+import {cloudCall} from '../../cloud/client.mjs';
 
 const root=path.dirname(fileURLToPath(import.meta.url)),repository=path.resolve(root,'../..');
 if(fs.existsSync(path.join(repository,'.env')))process.loadEnvFile(path.join(repository,'.env'));
@@ -28,9 +29,18 @@ const logger={info:()=>{},warn:()=>{},error:()=>{},debug:message=>{
  if(m)write(path.join(stateDir,'upload-progress.json'),{chunk:+m[1],total:+m[2],bytes:+m[3],at:new Date().toISOString()});
 }};
 const client=new WSClient({botId,secret,logger,maxAuthFailureAttempts:1,maxReconnectAttempts:10,requestTimeout:30000});
-const bind=process.argv.includes('--bind'),phrase=crypto.randomBytes(4).toString('hex'),studio=path.resolve(root,'../wechat-content-studio');
+for(const method of ['sendMessage','reply','uploadMedia','sendMediaMessage']){
+ if(typeof client[method]!=='function')continue;
+ const original=client[method].bind(client);
+ client[method]=(...args)=>{cloudCall('fence');return original(...args);};
+}
+let bind=process.argv.includes('--bind');
+const phrase=crypto.randomBytes(4).toString('hex'),studio=path.resolve(root,'../wechat-content-studio');
 let worker,runner,closing=false;
-if(bind){console.log('请在目标企业微信群 @ 此机器人，发送：绑定审核群 '+phrase);}
+if(bind){
+ if(process.env.EDITORIAL_CLOUD)write(path.join(stateDir,'binding-challenge.json'),{phrase,created_at:new Date().toISOString()});
+ else console.log('请在目标企业微信群 @ 此机器人，发送：绑定审核群 '+phrase);
+}
 else{
  if(!fs.existsSync(path.join(stateDir,'binding.json')))throw Error('Run npm run bind to select a group before starting the bot');
  runner=createCodexRunner({studio,stateDir,repository});
@@ -48,7 +58,11 @@ client.on('message.text',frame=>{void (async()=>{
  write(path.join(stateDir,'binding.json'),binding);
  const configPath=path.join(studio,'config.json'),config=JSON.parse(fs.readFileSync(configPath,'utf8'));
  config.review_destination={provider:'wecom',chatid:b.chatid,display_name:'企业微信审核群'};write(configPath,config);
- console.log('Group binding saved locally. No sample, historical artifact, or notification was sent.');client.disconnect();process.exit(0);
+ if(process.env.EDITORIAL_CLOUD){
+  bind=false;runner=createCodexRunner({studio,stateDir,repository});
+  worker=startProduction({client,botId,root,onError,runTask:runner,controlTask:runner.control});
+  state.phase='waiting_for_group_task';save();
+ }else{console.log('Group binding saved locally. No sample, historical artifact, or notification was sent.');client.disconnect();process.exit(0);}
  })().catch(e=>onError(e,'message'));});
 let timer;
 const close=async()=>{

@@ -16,5 +16,5 @@ config={**old,'group':'企业微信审核群','python':sys.executable,'article_p
         'article_delivery':'official_wechat_preview_only','turbopush_enabled':False,'publish_enabled':False}
 target.write_text(json.dumps(config,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 env=ROOT/'.env'
-if not env.exists():shutil.copyfile(ROOT/'.env.example',env);env.chmod(0o600)
+if not env.exists() and not os.environ.get('EDITORIAL_CLOUD'):shutil.copyfile(ROOT/'.env.example',env);env.chmod(0o600)
 print('Local paths configured. Fill .env and run codex login before binding the group.')

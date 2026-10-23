@@ -1,9 +1,39 @@
 """Native Channels cards via the official draft API; never publishes a video."""
 import argparse
+import hashlib
 import html
 import json
 import re
 from pathlib import Path
+from urllib.parse import urlparse
+
+
+def native_card_attributes(item):
+    """Keep the actual editor component, including opaque native metadata."""
+    from video_embed_check import video_tags
+    raw = item.get('native_html', '')
+    if not re.fullmatch(r'<mp-common-videosnap\b[^>]*>\s*</mp-common-videosnap>', raw, re.S | re.I):
+        raise ValueError('A complete atomic native Channels card is required')
+    if item.get('native_html_sha256') != hashlib.sha256(raw.encode('utf-8')).hexdigest():
+        raise ValueError('Native Channels card bytes differ from the captured editor component')
+    tags = video_tags(raw)
+    if len(tags) != 1:
+        raise ValueError('Only one native Channels component is allowed')
+    attrs = tags[0]['attrs']
+    if attrs.get('data-id') != item.get('export_id') or attrs.get('data-username') != item.get('username'):
+        raise ValueError('Native Channels card identity differs from its descriptor')
+    if any(key.lower().startswith('on') for key in attrs):
+        raise ValueError('Event handlers are not native card data')
+    if not re.fullmatch(r'\d+', attrs.get('data-nonceid', '')) or attrs.get('data-type') != 'video':
+        raise ValueError('The captured native card is missing its real nonce or video type')
+    for key, host in [('data-url', 'findermp.video.qq.com'), ('data-headimgurl', 'wx.qlogo.cn')]:
+        url = urlparse(attrs.get(key, ''))
+        if url.scheme != 'https' or url.hostname != host:
+            raise ValueError('The captured native card is missing its official media metadata')
+    for key in ('data-width', 'data-height'):
+        if not attrs.get(key, '').isdigit() or not 0 < int(attrs[key]) <= 16384:
+            raise ValueError('The captured native card dimensions are invalid')
+    return attrs
 
 
 def validate_descriptor(item):
@@ -11,6 +41,8 @@ def validate_descriptor(item):
         raise ValueError('A real Channels export ID is required, not a share URL or local record ID')
     if not re.fullmatch(r'v2_[A-Za-z0-9_-]+@finder', item.get('username', '')):
         raise ValueError('A real Channels username from the editor is required')
+    if item.get('native_html') or item.get('require_complete_native_component'):
+        native_card_attributes(item)
     return item
 
 
@@ -22,6 +54,8 @@ def descriptor_for(folder, article):
 
 def card_html(item):
     validate_descriptor(item)
+    if item.get('native_html'):
+        return item['native_html']
     attrs = {'class': 'js_uneditable custom_select_card channels_iframe videosnap_video_iframe',
              'data-pluginname': 'mpvideosnap', 'data-type': 'video',
              'data-id': item['export_id'], 'data-username': item['username'],
@@ -47,6 +81,10 @@ def insert_channel_video(folder, article, content):
     existing = [tag for tag in video_tags(content) if tag['tag'] == 'mp-common-videosnap']
     if existing:
         if len(existing) == 1 and existing[0]['attrs'].get('data-id') == item['export_id'] and existing[0]['attrs'].get('data-username') == item['username']:
+            if item.get('require_complete_native_component'):
+                wanted = native_card_attributes(item)
+                if any(existing[0]['attrs'].get(k) != wanted[k] for k in wanted):
+                    raise ValueError('Existing card was simplified; restore the captured native component before saving')
             return content
         raise ValueError('Existing Channels card differs; do not silently replace it')
     anchor = article['channel_video'].get('after_paragraph', '')
@@ -74,6 +112,10 @@ def capture_component(detail, export_id):
     for key in ('width', 'height'):
         if attrs.get('data-' + key):
             item[key] = int(attrs['data-' + key])
+    if all(attrs.get(key) for key in ('data-nonceid', 'data-url', 'data-headimgurl')):
+        raw = cards[0]['raw_start'] + '</mp-common-videosnap>'
+        item.update(native_html=raw, native_html_sha256=hashlib.sha256(raw.encode('utf-8')).hexdigest(),
+                    require_complete_native_component=True)
     return validate_descriptor(item)
 
 

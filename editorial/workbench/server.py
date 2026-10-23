@@ -1,5 +1,6 @@
 """Local operations workbench. Reads production receipts; writes its own plans only."""
 import argparse
+import base64
 import hashlib
 import json
 import mimetypes
@@ -122,6 +123,11 @@ class Workbench:
             self.state.mkdir(parents=True, exist_ok=True)
             temporary = self.state/('plans.'+secrets.token_hex(8)+'.tmp')
             temporary.write_text(json.dumps(store, ensure_ascii=False, indent=2), encoding='utf-8')
+            if os.environ.get('EDITORIAL_CLOUD'):
+                import sys
+                sys.path.insert(0, str(ROOT.parents[1]))
+                from cloud.client import persist
+                persist(self.state/'plans.json', store)
             os.replace(temporary, self.state/'plans.json')
             return store
 
@@ -256,9 +262,10 @@ class Conflict(ValueError):
 class Server(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, port, workbench):
+    def __init__(self, port, workbench, host='127.0.0.1'):
         self.workbench, self.session = workbench, secrets.token_urlsafe(32)
-        super().__init__(('127.0.0.1', port), Handler)
+        self.cloud_origin = os.environ.get('EDITORIAL_PUBLIC_ORIGIN') if os.environ.get('EDITORIAL_CLOUD') else None
+        super().__init__((host, port), Handler)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -268,6 +275,13 @@ class Handler(BaseHTTPRequestHandler):
         pass  # Do not log draft preview queries, credentials, or user content.
 
     def check_origin(self):
+        if self.server.cloud_origin:
+            expected = urlsplit(self.server.cloud_origin)
+            if self.headers.get('Host') != expected.netloc or self.headers.get('Sec-Fetch-Site') == 'cross-site':
+                raise PermissionError()
+            if self.headers.get('Origin') not in (None, self.server.cloud_origin):
+                raise PermissionError()
+            return
         port = self.server.server_port
         hosts = {f'127.0.0.1:{port}', f'localhost:{port}'}
         if self.headers.get('Host') not in hosts or self.headers.get('Sec-Fetch-Site') == 'cross-site':
@@ -276,6 +290,13 @@ class Handler(BaseHTTPRequestHandler):
             raise PermissionError()
 
     def authorized(self):
+        if self.server.cloud_origin:
+            try:
+                value = base64.b64decode(self.headers.get('Authorization','').removeprefix('Basic '), validate=True).decode()
+                if secrets.compare_digest(value, 'admin:'+os.environ['EDITORIAL_ADMIN_PASSWORD']):
+                    return True
+            except (ValueError, UnicodeError):
+                pass
         cookie = SimpleCookie()
         try:
             cookie.load(self.headers.get('Cookie', ''))
@@ -306,14 +327,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
+            if self.server.cloud_origin and self.path == '/healthz':
+                return self.json(200, {'alive':True})
             self.check_origin()
+            if self.server.cloud_origin and not self.authorized():
+                self.send_headers(401, 'text/plain; charset=utf-8', 0)
+                self.send_header('WWW-Authenticate', 'Basic realm="Editorial", charset="UTF-8"')
+                self.end_headers()
+                return
             path = unquote(urlsplit(self.path).path)
+            if self.server.cloud_origin and path == '/api/cloud/status':
+                return self.json(200, self.server.cloud_status())
             static = {'/':'index.html', '/app.js':'app.js', '/style.css':'style.css'}
             if path in static:
                 raw = (ROOT/'web'/static[path]).read_bytes()
                 self.send_headers(200, {'/':'text/html', '/app.js':'text/javascript', '/style.css':'text/css'}[path]+'; charset=utf-8', len(raw))
                 if path == '/':
-                    self.send_header('Set-Cookie', f'editorial_session={self.server.session}; HttpOnly; SameSite=Strict; Path=/')
+                    secure = '; Secure' if self.server.cloud_origin else ''
+                    self.send_header('Set-Cookie', f'editorial_session={self.server.session}; HttpOnly; SameSite=Strict; Path=/{secure}')
                 self.end_headers()
                 if self.command != 'HEAD':
                     self.wfile.write(raw)
@@ -321,7 +352,10 @@ class Handler(BaseHTTPRequestHandler):
             if not self.authorized():
                 raise PermissionError()
             if path == '/api/snapshot':
-                return self.json(200, self.server.workbench.snapshot())
+                value = self.server.workbench.snapshot()
+                if self.server.cloud_origin:
+                    value['cloud'] = self.server.cloud_status()
+                return self.json(200, value)
             match = re.fullmatch(r'/api/tasks/(C\d{4,})', path)
             if match:
                 return self.json(200, self.server.workbench.detail(match[1]))
@@ -380,6 +414,8 @@ class Handler(BaseHTTPRequestHandler):
             self.check_origin()
             if not self.authorized() or not self.headers.get('Origin'):
                 raise PermissionError()
+            if self.server.cloud_origin and self.path == '/api/cloud/auth/device':
+                return self.json(200, self.server.cloud_login())
             if self.path != '/api/plans' or self.headers.get_content_type() != 'application/json':
                 return self.json(404, {'error':'操作不存在'})
             length = int(self.headers.get('Content-Length', 0))

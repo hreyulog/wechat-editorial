@@ -1,4 +1,5 @@
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -67,6 +68,32 @@ class ChannelVideoTests(unittest.TestCase):
         self.assertTrue(verify_video_component(self.folder, self.article, payload['content'])['preserved'])
         self.assertEqual(binding['html_sha256'], studio.sha(output/'wechat.html'))
         self.assertEqual(payload['content'], (output/'wechat.html').read_text(encoding='utf-8'))
+
+    def test_complete_native_component_survives_capture_and_rebuild_verbatim(self):
+        raw=card_html(self.descriptor).replace(' data-type=',
+            ' data-nonceid="123456789" data-url="https://findermp.video.qq.com/path?token=opaque" '
+            'data-headimgurl="https://wx.qlogo.cn/avatar" data-extra="keep-me" data-type=')
+        captured=capture_component({'news_item':[{'content':raw}]},self.descriptor['export_id'])
+        self.assertEqual(captured['native_html'],raw)
+        self.assertEqual(card_html(captured),raw)
+        studio.write(self.folder/'src/channel.json',captured)
+        self.assertTrue(verify_video_component(self.folder,self.article,raw)['preserved'])
+        for attribute in ('data-nonceid="123456789"','data-url="https://findermp.video.qq.com/path?token=opaque"',
+                          'data-extra="keep-me"','data-width="1080"'):
+            simplified=raw.replace(attribute,'')
+            self.assertFalse(verify_video_component(self.folder,self.article,simplified)['preserved'])
+            with self.assertRaisesRegex(ValueError,'simplified'):
+                insert_channel_video(self.folder,self.article,simplified)
+
+    def test_native_card_identity_hash_and_unsafe_metadata_are_rejected(self):
+        raw=card_html(self.descriptor).replace(' data-type=',
+            ' data-nonceid="123456789" data-url="https://findermp.video.qq.com/path" '
+            'data-headimgurl="https://wx.qlogo.cn/avatar" data-type=')
+        captured=capture_component({'news_item':[{'content':raw}]},self.descriptor['export_id'])
+        with self.assertRaises(ValueError):card_html({**captured,'native_html':raw+' '})
+        for changed in (raw.replace('findermp.video.qq.com','attacker.test'),raw.replace(' data-type=',' onclick="bad()" data-type=')):
+            with self.assertRaises(ValueError):
+                card_html({**captured,'native_html':changed,'native_html_sha256':hashlib.sha256(changed.encode()).hexdigest()})
 
     def test_manual_adoption_is_read_only_and_bound_to_manifest_and_media(self):
         (self.folder/'official').mkdir()

@@ -1,0 +1,15 @@
+.git
+.env
+.env.*
+!.env.example
+node_modules
+dist
+**/__pycache__
+**/.venv*
+**/config.json
+**/state
+**/jobs
+**/outbox
+cloud/sessions
+**/*.log
+**/*.tmp

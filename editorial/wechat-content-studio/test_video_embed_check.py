@@ -44,6 +44,13 @@ class VideoEmbedTests(unittest.TestCase):
     def test_plain_articles_do_not_require_video_receipts(self):
         require_deliverable_video(self.folder, {}, 'irrelevant')
 
+    def test_id_only_card_cannot_pass_delivery_even_if_the_id_matches(self):
+        write(self.folder/'official/receipt.json', {'manifest_sha256':'same'})
+        write(self.folder/'official/readback.json', {'news_item':[{'content':
+            '<mp-common-videosnap data-id="export/real-response" data-username="v2_test@finder"></mp-common-videosnap>'}]})
+        with self.assertRaisesRegex(ValueError,'仅有作品 ID'):
+            require_deliverable_video(self.folder,self.article,'same')
+
 
 if __name__ == '__main__':
     unittest.main()
