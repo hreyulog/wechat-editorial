@@ -11,7 +11,8 @@ from urllib.parse import urlparse, urlunparse
 
 from official_api import OfficialClient, ApiError
 from video_embed_check import verify_video_component
-from studio import CONFIG, ROOT, checked_manifest, get_job, now, official_url, read, sha, write
+from channel_video import insert_channel_video
+from studio import CONFIG, ROOT, checked_manifest, get_job, now, official_url, read, sha, write, set_status
 
 
 def prepare(job_id, version=None):
@@ -33,6 +34,8 @@ def prepare(job_id, version=None):
         html = target.read_text(encoding='utf-8')
     (output/'wechat.html').write_text(html, encoding='utf-8')
     article = read(folder/'article.json')
+    html = insert_channel_video(folder, article, html)
+    (output/'wechat.html').write_text(html, encoding='utf-8')
     if not article['title'] or len(article['title']) > 32: raise ValueError('Title must be 1–32 characters')
     if len(html) > 20000 or any(x in html.lower() for x in ('<script', 'placeholder')):
         raise ValueError('Article HTML is not ready for a real draft')
@@ -118,6 +121,8 @@ def submit(job_id, version=None):
     preview = {'url':url,'provenance':'official_api_draft_get','media_id':receipt['media_id'],
                'attached_at':now(),'manifest_sha256':binding['manifest_sha256'],'readback_sha256':sha(output/'readback.json')}
     write(folder/'official-preview.json',preview)
+    if ready and job.get('status') == 'awaiting_video_embed' and job.get('version') == binding['version']:
+        set_status(job, 'awaiting_review')
     return {'job_id':job_id,'version':binding['version'],'state':receipt['state'],'url':url,'published':False,
             'ready_for_review':ready,
             **({'video_player_preserved':ready,'phone_playback_tested':False} if video_check['required'] else {})}

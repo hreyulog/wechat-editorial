@@ -1,5 +1,6 @@
 """Verify actual draft/get video components, never local placeholder markup."""
 import json
+import hashlib
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -21,6 +22,16 @@ def video_tags(content):
 
 
 def video_requirement(folder, article):
+    binding = folder / 'official/channel-binding.json'
+    if binding.is_file():
+        descriptor = json.loads(binding.read_text(encoding='utf-8-sig'))
+        receipt = json.loads((folder / 'official/receipt.json').read_text(encoding='utf-8-sig'))
+        digest = hashlib.sha256((folder / 'manifest.json').read_bytes()).hexdigest()
+        if descriptor.get('manifest_sha256') != digest or descriptor.get('media_id') != receipt.get('media_id'):
+            raise ValueError('Manually saved Channels binding belongs to another draft or version')
+        from channel_video import validate_descriptor
+        validate_descriptor(descriptor)
+        return {'kind': 'channels', 'id': descriptor['export_id'], 'username': descriptor['username']}
     setting = article.get('channel_video') or article.get('video_embed')
     if not setting:
         return None

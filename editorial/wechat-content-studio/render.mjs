@@ -28,6 +28,10 @@ if(kind!=='video'){
   const formatted=spawnSync(config.article_python,['-X','utf8',formatter,path.join(folder,'article.md'),'--theme','亲和','--scheme','松绿','-o',path.join(folder,'wechat.html')],{cwd:config.article_skills,windowsHide:true,encoding:'utf8'});
   fs.writeFileSync(path.join(folder,'format.log'),(formatted.stdout||'')+(formatted.stderr||''));
   if(formatted.status!==0)throw new Error('WeChat inline formatting failed; see format.log');
+  if(article.channel_video){
+    const inserted=spawnSync(config.article_python,['-X','utf8',path.join(root,'channel_video.py'),'render',folder],{cwd:root,windowsHide:true,encoding:'utf8'});
+    if(inserted.status!==0)throw new Error('Channels card insertion failed: '+inserted.stdout);
+  }
   const require=createRequire(import.meta.url); const sharp=require('sharp');
   const wrap=(text,size)=>{let rows=[''],units=0;for(const ch of text){const u=/[\u0000-\u007f]/.test(ch)?0.55:1;if(units+u>size){rows.push('');units=0;}rows[rows.length-1]+=ch;units+=u;}return rows;};
   let y=100; const lines=[];

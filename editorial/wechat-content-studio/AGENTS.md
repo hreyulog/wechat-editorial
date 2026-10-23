@@ -24,7 +24,7 @@
 
 只接受官方真实返回或用户直接提供的 HTTPS mp.weixin.qq.com/s 预览地址；编辑器后台地址、localhost、伪造 URL 不能作为审核链接。不得绕过浏览器站点限制访问后台。公众号草稿不是公开发布；纯文章的“通过 C编号-vN”只记录审核，不执行发布。
 
-含视频文章还必须核对 draft/get 正文中的实际组件及身份；素材上传、errcode:0 和标题保留均不代表播放器保留。video_embedding_incomplete / awaiting_video_embed 时不能当作含视频成稿送审或审核。视频号原生组件的完整字段尚待编辑器真实样本验证，不构造假字段或因一次过滤就宣称所有官方 API 都不支持。修改已有草稿时只用授权的 draft/update，保留原始 HTML 和前后读回，不直接往返提交含实体编码的回读 HTML 造成样式丢失。详见 ../../docs/ARTICLE-VIDEO.md。
+含视频文章还必须核对 draft/get 正文中的实际组件及身份；素材上传、errcode:0 和标题保留均不代表播放器保留。video_embedding_incomplete / awaiting_video_embed 时不能当作含视频成稿送审或审核。视频号原生卡片已用真实编辑器样本验证可经官方 add/update 保存。使用 article.channel_video 的 source（src 内描述文件）和 after_paragraph，由 channel_video.py 自动插入；描述文件必须含真实 export_id 和该账号 username，不从短链接或标题猜测作品身份。旧 video_embed 与 channel_video 二选一。新作品不得沿用旧作品 ID；上传视频号草稿也不代表已经存在公开引用 ID。可用 capture 从指定官方草稿提取卡片；用户手动保存的当前版本可显式 adopt 后 submit 刷新读回，adopt 不改远端或已送审源文件。修改已有草稿时只用授权的 draft/update，保留原始 HTML 和前后读回，不直接往返提交含实体编码的回读 HTML 造成样式丢失。详见 ../../docs/ARTICLE-VIDEO.md。
 
 ## 企业微信群送审
 
