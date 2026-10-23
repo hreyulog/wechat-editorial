@@ -8,6 +8,8 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.request
+import urllib.error
 from pathlib import Path
 
 from cloud.store import ROOT
@@ -17,11 +19,20 @@ turbo_status={'installed':False,'backend_ready':False,'account_login_verified':F
 
 
 def frontend():
-    password=subprocess.run(['openssl','passwd','-6','-stdin'],input=os.environ['EDITORIAL_ADMIN_PASSWORD']+'\n',
-        text=True,capture_output=True,check=True).stdout.strip()
-    auth=Path('/tmp/editorial.htpasswd');auth.write_text('admin:'+password+'\n');auth.chmod(0o600)
-    processes.append(subprocess.Popen(['nginx','-c',str(ROOT/'cloud/nginx.conf'),'-g','daemon off;'],
-        stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
+    try:
+        password=subprocess.run(['openssl','passwd','-6','-stdin'],input=os.environ['EDITORIAL_ADMIN_PASSWORD']+'\n',
+            text=True,capture_output=True,check=True).stdout.strip()
+        auth=Path('/tmp/editorial.htpasswd');auth.write_text('admin:'+password+'\n');auth.chmod(0o600)
+        log=Path('/tmp/editorial-nginx.log').open('ab')
+        process=subprocess.Popen(['nginx','-c',str(ROOT/'cloud/nginx.conf'),'-g','daemon off;'],
+            stdout=subprocess.DEVNULL,stderr=log)
+        processes.append(process);time.sleep(.3)
+        turbo_status['frontend_ready']=process.poll() is None
+        if process.poll() is not None:turbo_status['frontend_exit_code']=process.returncode
+        return process.poll() is None
+    except Exception as error:
+        turbo_status['frontend_ready']=False;turbo_status['frontend_error_type']=type(error).__name__
+        return False
 
 
 def start(store):
@@ -63,6 +74,14 @@ def start(store):
                             'scope':'full-mcp-surface','enabled_tool_count':21,
                             'credentials_source':'Cloud TurboPush native home; no desktop credentials imported'})
                         turbo_status['backend_ready']=True
+                        try:
+                            request=urllib.request.Request('http://127.0.0.1:'+str(value['port'])+'/account/logged?simple=true',
+                                headers={'Authorization':value['auth']})
+                            with urllib.request.urlopen(request,timeout=5) as response:accounts=json.load(response)
+                            turbo_status['account_login_verified']=accounts.get('code')==200
+                            turbo_status['account_count']=len(accounts.get('data') or []) if isinstance(accounts.get('data'),list) else None
+                        except urllib.error.HTTPError as error:
+                            turbo_status['account_login_verified']=False;turbo_status['account_check_http_status']=error.code
                 source=data/'data.db'
                 if source.exists() and source.stat().st_mtime_ns!=last:
                     with tempfile.TemporaryDirectory() as temporary:

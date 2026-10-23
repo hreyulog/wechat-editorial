@@ -34,18 +34,26 @@ def cloud_login():
     login_process=subprocess.Popen(['codex','login','--device-auth'],stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,text=True,env=os.environ)
     def collect():
+        errors=[]
+        log=Path('/tmp/editorial-codex-login.log').open('w',encoding='utf-8')
         for line in login_process.stdout:
             line=re.sub(r'\x1b\[[0-9;]*m','',line)
+            log.write(line);log.flush()
+            if re.search(r'error|failed|forbidden|denied',line,re.I):
+                sanitized=re.sub(r'https?://\S+','[authorization endpoint]',line).strip()
+                for name in ('WECOM_BOT_SECRET','WECHAT_APPSECRET','WXCLOUD_CLI_KEY','EDITORIAL_MASTER_KEY','EDITORIAL_ADMIN_PASSWORD','OPENAI_API_KEY'):
+                    if os.environ.get(name):sanitized=sanitized.replace(os.environ[name],'[REDACTED]')
+                errors.append(sanitized[:500])
             match=re.search(r'https://(?:auth\.openai\.com|chatgpt\.com)/[a-zA-Z0-9/_.-]+',line)
             if match:login_state['url']=match[0]
             match=re.search(r'\b[A-Z0-9]{4,6}-[A-Z0-9]{4,6}\b',line)
             if match:login_state['code']=match[0];login_state['phase']='waiting_for_user'
-        code=login_process.wait()
+        code=login_process.wait();log.close()
         auth=Path(os.environ['CODEX_HOME'])/'auth.json'
         if code==0 and auth.exists():
             try:store.secret('codex_auth',auth.read_bytes());login_state.clear();login_state['phase']='authenticated'
             except Exception:login_state.clear();login_state['phase']='persistence_failed'
-        else:login_state.clear();login_state.update(phase='login_failed',exit_code=code)
+        else:login_state.clear();login_state.update(phase='login_failed',exit_code=code,error='\n'.join(errors[-3:]))
     threading.Thread(target=collect,daemon=True).start()
     return dict(login_state)
 
@@ -159,10 +167,13 @@ def main():
     threading.Thread(target=ThreadingHTTPServer(('127.0.0.1',8790),Durability).serve_forever,daemon=True).start()
     spec=importlib.util.spec_from_file_location('workbench',ROOT/'editorial/workbench/server.py')
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    server=module.Server(8788,module.Workbench(studio,bot,ROOT/'editorial/workbench/state'),host='127.0.0.1')
+    proxy=desktop.frontend()
+    # The authenticated management/status UI remains available if the optional
+    # desktop proxy fails. Never fall back to an unauthenticated public server.
+    server=module.Server(8788 if proxy else int(os.environ.get('PORT',8080)),
+        module.Workbench(studio,bot,ROOT/'editorial/workbench/state'),host='127.0.0.1' if proxy else '0.0.0.0')
     server.cloud_status=cloud_status
     server.cloud_login=cloud_login
-    desktop.frontend()
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
     threading.Thread(target=start_worker,daemon=True).start()
     server.serve_forever()

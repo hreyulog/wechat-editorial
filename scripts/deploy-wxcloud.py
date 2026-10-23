@@ -19,9 +19,9 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('inventory',ROOT/'scripts/inspect-wxcloud.py')
 inventory=importlib.util.module_from_spec(spec);spec.loader.exec_module(inventory)
-MUTATIONS={'EstablishCloudBaseRunServerWx','UpdateServerBaseConfig','SubmitServerRelease'}
+MUTATIONS={'EstablishCloudBaseRunServerWx','UpdateServerBaseConfig','SubmitServerRelease','DeleteCloudBaseRunServerVersion'}
 READS=inventory.READ_ACTIONS|{'DescribeCloudBaseBuildService','DescribeServerManageTask',
-    'DescribeCloudBaseRunBuildLog','DescribeCloudBaseRunProcessLog'}
+    'DescribeCloudBaseRunBuildLog','DescribeCloudBaseRunProcessLog','SearchClsLog'}
 
 
 class DeploymentClient(inventory.Client):
@@ -29,6 +29,9 @@ class DeploymentClient(inventory.Client):
         if name not in READS|MUTATIONS:raise ValueError('Operation is outside deployment scope')
         if name in MUTATIONS and not (data.get('ServerName') or data.get('ServiceName','')).startswith('editorial-'):
             raise ValueError('Only dedicated editorial services may be changed')
+        if name=='DeleteCloudBaseRunServerVersion' and (data.get('IsDeleteServer') is not False or data.get('IsDeleteImage') is not False
+                or not data.get('VersionName','').startswith(data['ServerName']+'-')):
+            raise ValueError('Retiring a version must preserve its service and rollback image')
         response=self.request('apihttpagent',{'action':name,'postdata':json.dumps(data),
             'region':region,'service':'tcb','version':'2018-06-08'})
         result=json.loads(response['content'])['Response']
@@ -112,12 +115,14 @@ def deploy(args):
         if not image.startswith('ccr.ccs.tencentyun.com/') or any(c.isspace() for c in image):raise ValueError('Unexpected cloud image registry')
         dockerfile=f'''FROM {image}
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends nginx openssl xvfb x11vnc websockify novnc openbox dbus-x11 libwebkit2gtk-4.1-0 libayatana-appindicator3-1 && rm -rf /var/lib/apt/lists/*
+RUN if ! command -v nginx; then apt-get update && apt-get install -y --no-install-recommends nginx openssl xvfb x11vnc websockify novnc openbox dbus-x11 libwebkit2gtk-4.1-0 libayatana-appindicator3-1 && rm -rf /var/lib/apt/lists/*; fi
 COPY cloud/install_turbopush.py /tmp/install_turbopush.py
-RUN python3 /tmp/install_turbopush.py && pip install --no-cache-dir 'qrcode[pil]==8.2'
+RUN if [ ! -x /opt/turbopush/turbopush ]; then python3 /tmp/install_turbopush.py; fi
+RUN python3 -c 'import qrcode' || pip install --no-cache-dir 'qrcode[pil]==8.2'
 COPY --chown=editorial:editorial . /app
 RUN python3 /app/cloud/restore_sources.py
 USER editorial
+RUN touch /tmp/editorial.htpasswd && nginx -t -c /app/cloud/nginx.conf
 WORKDIR /app
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["python3", "-m", "cloud.runtime"]

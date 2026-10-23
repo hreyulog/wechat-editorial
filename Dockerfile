@@ -22,6 +22,7 @@ RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --omit=dev --no-audit --no-fund \
     && npm install -g @openai/codex@0.164.0
 COPY --chown=editorial:editorial . .
 RUN python3 cloud/restore_sources.py
+RUN touch /tmp/editorial.htpasswd && nginx -t -c /app/cloud/nginx.conf
 EXPOSE 8080
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["python3", "-m", "cloud.runtime"]

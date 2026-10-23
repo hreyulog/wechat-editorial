@@ -35,10 +35,14 @@ for(const method of ['sendMessage','reply','uploadMedia','sendMediaMessage']){
  client[method]=(...args)=>{cloudCall('fence');return original(...args);};
 }
 let bind=process.argv.includes('--bind');
-const phrase=crypto.randomBytes(4).toString('hex'),studio=path.resolve(root,'../wechat-content-studio');
+const previousChallenge=process.env.EDITORIAL_CLOUD&&fs.existsSync(path.join(stateDir,'binding-challenge.json'))
+ ?JSON.parse(fs.readFileSync(path.join(stateDir,'binding-challenge.json'),'utf8')):undefined;
+const phrase=previousChallenge&&Date.now()-Date.parse(previousChallenge.created_at)<24*60*60*1000
+ ?previousChallenge.phrase:crypto.randomBytes(4).toString('hex');
+const studio=path.resolve(root,'../wechat-content-studio');
 let worker,runner,closing=false;
 if(bind){
- if(process.env.EDITORIAL_CLOUD)write(path.join(stateDir,'binding-challenge.json'),{phrase,created_at:new Date().toISOString()});
+ if(process.env.EDITORIAL_CLOUD)write(path.join(stateDir,'binding-challenge.json'),{phrase,created_at:previousChallenge?.phrase===phrase?previousChallenge.created_at:new Date().toISOString()});
  else console.log('请在目标企业微信群 @ 此机器人，发送：绑定审核群 '+phrase);
 }
 else{
